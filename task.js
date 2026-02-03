@@ -36,7 +36,7 @@ const MIN_MIDI = 36;  // 036-C2.wav
 const MAX_MIDI = 95;  // （必要に応じて調整）
 
 const N_TRIALS = 60;     // 試行数
-const TRIAL_MS = 5000;         // 音提示〜次の音まで固定5秒
+const TRIAL_MS = 4000;         // 音提示〜次の音まで固定4秒
 const START_DELAY_MS = 5000;   // 音量OK後、開始まで5秒
 
 
@@ -393,7 +393,7 @@ async function startTask() {
         elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now (5 seconds).`;
       }, msUntilStart);
     
-      // ★重要：次のtrialへは「音開始から5秒」で固定
+      // ★重要：次のtrialへは「音開始から4秒」で固定
       trialTimeoutId = setTimeout(() => {
         if (!respondedThisTrial) {
           results.push({
@@ -421,7 +421,7 @@ async function startTask() {
       return;
     }
   
-    // ★ここが重要：trial開始から5秒後に必ず次へ（回答の有無に関係なし）
+    // ★ここが重要：trial開始から4秒後に必ず次へ（回答の有無に関係なし）
     const elapsed = performance.now() - trialStartPerf;
     const remain = Math.max(0, TRIAL_MS - elapsed);
   
@@ -655,7 +655,7 @@ async function volumePlay() {
     }
   
     trialIndex = -1;
-    elStatus.textContent = `The main trial will begin in 5 seconds...`;
+    elStatus.textContent = `The main trial will begin in 4 seconds...`;
   
     setTimeout(async () => {
       elStatus.textContent = "The trial begins";
@@ -729,7 +729,7 @@ async function saveResultAsPDF() {
     return;
   }
 
-  setStatus("送信されました。ありがとうございます！");
+  setStatus("送信されました.");
 
   // canvasがまだ表示されていない場合に備える
   const chartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
