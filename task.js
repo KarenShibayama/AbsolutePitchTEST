@@ -674,10 +674,26 @@ function toCSV(rows) {
   return lines.join("\n");
 }
 
-function downloadCSV() {
+async function downloadCSV() {
   if (!results.length) return;
 
-  // 正答率を計算
+  // 送信（先にやる：iPhoneでDLを始めると通信が切れることがある）
+  setStatus("送信中…（数秒かかることがあります）");
+
+  const ok = await sendDataToGAS({
+    subjID,                 // ← task.js内の subjID 変数（既にある）
+    task: "AP_Task_v1",     // 好きな名前でOK
+    payload: { results }    // ← 保存したい本体
+  });
+
+  if (!ok) {
+    setStatus("送信に失敗しました。通信状態を確認して、もう一度押してください。", true);
+    return;
+  }
+
+  setStatus("送信されました。ありがとうございます！");
+
+  // --- ここから従来のCSVダウンロード ---
   const nCorrect = results.filter(r => r.correct === 1).length;
   const total = N_TRIALS;
   const accPercent = Math.round((nCorrect / total) * 100);
@@ -691,15 +707,30 @@ function downloadCSV() {
     .slice(0,19)
     .replaceAll(":","-");
 
-  // ★ 正答率％をファイル名に入れる
   a.download = `ap_${subjID}_acc${accPercent}pct_${timestamp}.csv`;
-
   a.href = URL.createObjectURL(blob);
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-function saveResultAsPDF() {
+async function saveResultAsPDF() {
+  if (!results.length) return;
+
+  setStatus("送信中…（数秒かかることがあります）");
+
+  const ok = await sendDataToGAS({
+    subjID,
+    task: "AP_Task_v1",
+    payload: { results }
+  });
+
+  if (!ok) {
+    setStatus("送信に失敗しました。通信状態を確認して、もう一度押してください。", true);
+    return;
+  }
+
+  setStatus("送信されました。ありがとうございます！");
+
   // canvasがまだ表示されていない場合に備える
   const chartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
     ? canvasAcc.toDataURL("image/png")
@@ -771,6 +802,11 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function setStatus(msg, isError=false) {
+  elStatus.textContent = msg;
+  elStatus.style.color = isError ? "crimson" : "#111";
 }
 
 btnStart.addEventListener("click", startTask);

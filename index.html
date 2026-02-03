@@ -139,19 +139,7 @@
         return false;
       }
     }
-    
-    // 例：終了時に呼ぶ
-    async function onFinish() {
-      const subjID = document.querySelector("#subjID").value;
-      const trials = window.trialsData; // あなたの試行データ配列など
-      const ok = await sendDataToGAS({
-        subjID,
-        task: "myTask_v1",
-        payload: { trials },
-      });
-    
-      alert(ok ? "送信完了しました。ありがとうございます！" : "送信に失敗しました。通信状態を確認して再送してください。");
-    }
+
     </script>
 </body>
 </html>
