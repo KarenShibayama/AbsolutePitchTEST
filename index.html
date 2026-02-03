@@ -106,5 +106,52 @@
   <div id="keyboard" class="keyboard"></div>
 
   <script src="task.js" defer></script>
+  <script>
+    const GAS_URL = "さっきのGAS WebアプリURL";
+    
+    async function sendDataToGAS({ subjID, task, payload }) {
+      const body = {
+        subjID,
+        task,
+        payload,
+        userAgent: navigator.userAgent,
+        clientTimeISO: new Date().toISOString(),
+      };
+    
+      // iPhone/Safariの相性を考えてまずsendBeaconを試す
+      try {
+        const ok = navigator.sendBeacon(
+          GAS_URL,
+          new Blob([JSON.stringify(body)], { type: "application/json" })
+        );
+        if (ok) return true;
+      } catch (e) {}
+    
+      // sendBeaconがダメならfetch
+      try {
+        const res = await fetch(GAS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return res.ok;
+      } catch (e) {
+        return false;
+      }
+    }
+    
+    // 例：終了時に呼ぶ
+    async function onFinish() {
+      const subjID = document.querySelector("#subjID").value;
+      const trials = window.trialsData; // あなたの試行データ配列など
+      const ok = await sendDataToGAS({
+        subjID,
+        task: "myTask_v1",
+        payload: { trials },
+      });
+    
+      alert(ok ? "送信完了しました。ありがとうございます！" : "送信に失敗しました。通信状態を確認して再送してください。");
+    }
+    </script>
 </body>
 </html>
