@@ -334,6 +334,7 @@ async function makeTrials(n) {
 
 // ====== 課題進行 ======
 async function startTask() {
+    alreadySent = false;
     subjID = (elSubjId.value || "").trim();
     if (!subjID) {
       elStatus.textContent = "Please enter the Subject ID or Name.";
@@ -674,62 +675,21 @@ function toCSV(rows) {
   return lines.join("\n");
 }
 
-async function downloadCSV() {
+function downloadCSV() {
   if (!results.length) return;
 
-  // 送信（先にやる：iPhoneでDLを始めると通信が切れることがある）
-  setStatus("送信中…（数秒かかることがあります）");
-
-  const ok = await sendDataToGAS({
-    subjID,                 // ← task.js内の subjID 変数（既にある）
-    task: "AP_Task_v1",     // 好きな名前でOK
-    payload: { results }    // ← 保存したい本体
-  });
-
-  if (!ok) {
-    setStatus("送信に失敗しました。通信状態を確認して、もう一度押してください。", true);
-    return;
-  }
-
-  setStatus("送信されました。ありがとうございます！");
-
-  // --- ここから従来のCSVダウンロード ---
-  const nCorrect = results.filter(r => r.correct === 1).length;
-  const total = N_TRIALS;
-  const accPercent = Math.round((nCorrect / total) * 100);
-
+  // CSV生成
   const csv = toCSV(results);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
-
-  const timestamp = new Date()
-    .toISOString()
-    .slice(0,19)
-    .replaceAll(":","-");
-
-  a.download = `ap_${subjID}_acc${accPercent}pct_${timestamp}.csv`;
+  a.download = `ap_${subjID}.csv`;
   a.href = URL.createObjectURL(blob);
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-async function saveResultAsPDF() {
+function saveResultAsPDF() {
   if (!results.length) return;
-
-  setStatus("送信中…（数秒かかることがあります）");
-
-  const ok = await sendDataToGAS({
-    subjID,
-    task: "AP_Task_v1",
-    payload: { results }
-  });
-
-  if (!ok) {
-    setStatus("送信に失敗しました。通信状態を確認して、もう一度押してください。", true);
-    return;
-  }
-
-  setStatus("送信されました.");
 
   // canvasがまだ表示されていない場合に備える
   const chartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
@@ -795,47 +755,25 @@ async function saveResultAsPDF() {
   setTimeout(() => w.print(), 300);
 }
 
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function setStatus(msg, isError=false) {
   elStatus.textContent = msg;
   elStatus.style.color = isError ? "crimson" : "#111";
 }
 
-async function sendOnce() {
-  if (alreadySent) {
-    console.log("Already sent. Skip.");
-    return true;
-  }
-
-  const ok = await sendDataToGAS({
-    subjID,
-    task: "AP_Task_v1",
-    payload: { results },
-  });
-
-  if (ok) {
-    alreadySent = true;
-  }
-  return ok;
-}
-// ===== 重複送信防止 =====
+// ===== 重複送信防止（送信は必ず1回だけ）=====
 let alreadySent = false;
 
 async function sendOnce() {
   console.log("sendOnce called", new Date().toISOString());
+
   if (alreadySent) {
     console.log("Already sent. Skip sending.");
     return true;
   }
 
+  setStatus("送信中…（数秒かかることがあります）");
+
   const ok = await sendDataToGAS({
     subjID,
     task: "AP_Task_v1",
@@ -844,25 +782,28 @@ async function sendOnce() {
 
   if (ok) {
     alreadySent = true;
+    setStatus("送信されました。");
+  } else {
+    setStatus("送信に失敗しました。通信状態を確認して、もう一度押してください。", true);
   }
+
   return ok;
 }
+
 async function onDownloadCSV() {
   const ok = await sendOnce();
-  if (!ok) {
-    alert("データ送信に失敗しました。通信状態をご確認ください。");
-    return;
-  }
-  downloadCSV(); // ← 既存関数
+  if (!ok) return;
+  downloadCSV(); // ← 保存だけ（送信しない）
 }
 
 async function onSavePDF() {
   const ok = await sendOnce();
-  if (!ok) {
-    alert("データ送信に失敗しました。通信状態をご確認ください。");
-    return;
-  }
-  saveResultAsPDF(); // ← 既存関数
+  if (!ok) return;
+
+  // printを開く前に少し待つ（Safari/iPhoneで送信が中断されるのを避ける）
+  await new Promise(r => setTimeout(r, 800));
+
+  saveResultAsPDF(); // ← 保存だけ（送信しない）
 }
 
 btnStart.addEventListener("click", startTask);
