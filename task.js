@@ -830,6 +830,7 @@ async function sendOnce() {
 let alreadySent = false;
 
 async function sendOnce() {
+  console.log("sendOnce called", new Date().toISOString());
   if (alreadySent) {
     console.log("Already sent. Skip sending.");
     return true;
@@ -863,6 +864,7 @@ async function onSavePDF() {
   }
   saveResultAsPDF(); // ← 既存関数
 }
+
 btnStart.addEventListener("click", startTask);
 btnVolPlay.addEventListener("click", volumePlay);
 btnVolOK.addEventListener("click", volumeOK);
