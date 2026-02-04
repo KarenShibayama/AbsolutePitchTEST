@@ -390,7 +390,7 @@ async function startTask() {
       // 表示は「音が鳴る直前〜直後」に合わせる
       setTimeout(() => {
         tSoundOn = performance.now();
-        elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now (5 seconds).`;
+        elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now (4 seconds).`;
       }, msUntilStart);
     
       // ★重要：次のtrialへは「音開始から4秒」で固定
@@ -655,7 +655,7 @@ async function volumePlay() {
     }
   
     trialIndex = -1;
-    elStatus.textContent = `The main trial will begin in 4 seconds...`;
+    elStatus.textContent = `The main trial will begin in 5 seconds...`;
   
     setTimeout(async () => {
       elStatus.textContent = "The trial begins";
@@ -809,8 +809,64 @@ function setStatus(msg, isError=false) {
   elStatus.style.color = isError ? "crimson" : "#111";
 }
 
+async function sendOnce() {
+  if (alreadySent) {
+    console.log("Already sent. Skip.");
+    return true;
+  }
+
+  const ok = await sendDataToGAS({
+    subjID,
+    task: "AP_Task_v1",
+    payload: { results },
+  });
+
+  if (ok) {
+    alreadySent = true;
+  }
+  return ok;
+}
+// ===== 重複送信防止 =====
+let alreadySent = false;
+
+async function sendOnce() {
+  if (alreadySent) {
+    console.log("Already sent. Skip sending.");
+    return true;
+  }
+
+  const ok = await sendDataToGAS({
+    subjID,
+    task: "AP_Task_v1",
+    payload: { results },
+  });
+
+  if (ok) {
+    alreadySent = true;
+  }
+  return ok;
+}
+async function onDownloadCSV() {
+  const ok = await sendOnce();
+  if (!ok) {
+    alert("データ送信に失敗しました。通信状態をご確認ください。");
+    return;
+  }
+  downloadCSV(); // ← 既存関数
+}
+
+async function onSavePDF() {
+  const ok = await sendOnce();
+  if (!ok) {
+    alert("データ送信に失敗しました。通信状態をご確認ください。");
+    return;
+  }
+  saveResultAsPDF(); // ← 既存関数
+}
 btnStart.addEventListener("click", startTask);
-btnDownload.addEventListener("click", downloadCSV);
 btnVolPlay.addEventListener("click", volumePlay);
 btnVolOK.addEventListener("click", volumeOK);
-btnPdf.addEventListener("click", saveResultAsPDF);
+//btnPdf.addEventListener("click", saveResultAsPDF);
+//btnDownload.addEventListener("click", downloadCSV);
+btnDownload.addEventListener("click", onDownloadCSV);
+btnPdf.addEventListener("click", onSavePDF);
