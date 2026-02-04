@@ -77,9 +77,24 @@
     /* 触ったときに選択が出ないように */
     .key { -webkit-tap-highlight-color: transparent; }
     
-    html, body { background: #fff !important; color: #111 !important; }
-    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    img { background: #fff !important; }
+    /* ===== クリック/フォーカスでレイアウトがズレないように固定 ===== */
+    #keyboard .key{
+      box-sizing: border-box;
+      outline: none;              /* フォーカス輪郭でズレるのを防ぐ */
+      border-width: 1px;          /* 押しても太さが変わらないよう固定 */
+      padding: 0;                 /* 既に0だが念のため */
+      line-height: 1;             /* フォント差で高さが揺れないように */
+    }
+
+    #keyboard .key:focus,
+    #keyboard .key:focus-visible,
+    #keyboard .key:active{
+      outline: none;
+      box-shadow: none;           /* 影で見た目が動くのを防ぐ */
+      transform: none;            /* 押下時の微妙な移動を無効化 */
+    }
+
+    #keyboard { overflow: hidden; } /* 1pxズレでスクロールバーが出るのを防ぐ */
     </style>
 </head>
 <body>

@@ -714,15 +714,26 @@ function saveResultAsPDF() {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 
-  // chart を軽く（iPhone対策）
-  let chartDataUrl = "";
-  try {
-    if (canvasAcc && canvasAcc.style.display !== "none") {
-      chartDataUrl = canvasAcc.toDataURL("image/jpeg", 0.85); // ★png→jpegで軽量化
-    }
-  } catch (e) {
-    chartDataUrl = ""; // 失敗してもPDF自体は出す
-  }
+      function canvasToDataURLWithWhiteBG(canvas) {
+          const tmp = document.createElement("canvas");
+          tmp.width = canvas.width;
+          tmp.height = canvas.height;
+        
+          const ctx = tmp.getContext("2d");
+          // 背景を白で塗る
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, tmp.width, tmp.height);
+        
+          // 元canvasを上に描く
+          ctx.drawImage(canvas, 0, 0);
+        
+          // PNGでもJPEGでもOK（PNGの方が綺麗）
+          return tmp.toDataURL("image/png");
+      }
+        // ---- saveResultAsPDF 内 ----
+        const chartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
+          ? canvasToDataURLWithWhiteBG(canvasAcc)
+          : "";
 
   const { nCorrect, total } = calcAccuracy();
   const accPct = Math.round((nCorrect / total) * 100);
