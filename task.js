@@ -50,6 +50,7 @@ let results = [];
 let subjID = "";
 // どちらを表示する？  "sharp" = C/C#表記,  "solfege" = do/re/mi表記
 let LABEL_MODE = "sharp";  // ←必要なら "solfege" に
+let runId = null;
 
 const elStatus = document.getElementById("status");
 const btnStart = document.getElementById("btnStart");
@@ -335,6 +336,10 @@ async function makeTrials(n) {
 // ====== 課題進行 ======
 async function startTask() {
     alreadySent = false;
+
+    // 1実施 = 1 runId（ユニークID）
+    runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
     subjID = (elSubjId.value || "").trim();
     if (!subjID) {
       elStatus.textContent = "Please enter the Subject ID or Name.";
@@ -679,10 +684,18 @@ function downloadCSV() {
   if (!results.length) return;
 
   // CSV生成
+  if (!results.length) return;
+
+  const { nCorrect, total } = calcAccuracy();
+  const accPercent = Math.round((nCorrect / total) * 100);
+  const timestamp = new Date()
+    .toISOString()
+    .slice(0, 19)
+    .replaceAll(":", "-"); // for file name
   const csv = toCSV(results);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
-  a.download = `ap_${subjID}.csv`;
+  a.download = `ap_${subjID}_acc${accPercent}pct_${timestamp}.csv`;
   a.href = URL.createObjectURL(blob);
   a.click();
   URL.revokeObjectURL(a.href);
@@ -777,7 +790,7 @@ async function sendOnce() {
   const ok = await sendDataToGAS({
     subjID,
     task: "AP_Task_v1",
-    payload: { results },
+    payload: { runId, results },
   });
 
   if (ok) {
@@ -803,7 +816,7 @@ async function onSavePDF() {
   // printを開く前に少し待つ（Safari/iPhoneで送信が中断されるのを避ける）
   await new Promise(r => setTimeout(r, 800));
 
-  saveResultAsPDF(); // ← 保存だけ（送信しない）
+  saveResultAsPDF(); // ← save only（do not send）
 }
 
 btnStart.addEventListener("click", startTask);
