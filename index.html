@@ -117,24 +117,15 @@
         userAgent: navigator.userAgent,
         clientTimeISO: new Date().toISOString(),
       };
-    
+
       try {
         const res = await fetch(GAS_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-          keepalive: true,   // ← iPhone対策（ページ遷移/閉じる時も送れる）
         });
-    
-        // GAS側が {ok:true} を返している前提でチェックする
-        const txt = await res.text();
-        try {
-          const j = JSON.parse(txt);
-          return !!j.ok;
-        } catch {
-          // JSONで返らない場合でも 200 なら一旦OK扱い（デバッグ中はtxtを見て）
-          return res.ok;
-        }
+
+      
+        return res.ok;
       } catch (e) {
         return false;
       }
