@@ -704,27 +704,37 @@ function downloadCSV() {
 function saveResultAsPDF() {
   if (!results.length) return;
 
-  // canvasがまだ表示されていない場合に備える
-  const chartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
-    ? canvasAcc.toDataURL("image/png")
-    : "";
+  // escapeHtml が無いときも落ちないようにする
+  const esc = (typeof escapeHtml === "function")
+    ? escapeHtml
+    : (s) => String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+  // chart を軽く（iPhone対策）
+  let chartDataUrl = "";
+  try {
+    if (canvasAcc && canvasAcc.style.display !== "none") {
+      chartDataUrl = canvasAcc.toDataURL("image/jpeg", 0.85); // ★png→jpegで軽量化
+    }
+  } catch (e) {
+    chartDataUrl = ""; // 失敗してもPDF自体は出す
+  }
 
   const { nCorrect, total } = calcAccuracy();
   const accPct = Math.round((nCorrect / total) * 100);
+  const dt = new Date().toLocaleString();
 
-  const now = new Date();
-  const dt = now.toLocaleString();
-
-  // 終了画面の「レポート用HTML」を新しいウィンドウで開いて印刷
   const w = window.open("", "_blank");
   if (!w) {
     alert("ポップアップがブロックされました。ブラウザ設定で許可してください。");
     return;
   }
 
-  w.document.open();
-  w.document.write(`
-<!doctype html>
+  const html = `<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8"/>
@@ -738,20 +748,20 @@ function saveResultAsPDF() {
   .kpi { font-size: 16px; margin: 8px 0; }
   img { width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
   .note { margin-top: 14px; font-size: 12px; color: #666; }
-  @media print {
-    button { display: none; }
-  }
+  @media print { button { display: none; } }
 </style>
 </head>
 <body>
   <div class="card">
     <h1>Absolute Pitch Task Result</h1>
-    <div class="meta">SubjID/Name: <b>${escapeHtml(subjID)}</b><br/>Date: ${escapeHtml(dt)}</div>
+    <div class="meta">SubjID/Name: <b>${esc(subjID)}</b><br/>Date: ${esc(dt)}</div>
     <div class="kpi">Correct: <b>${nCorrect} / ${total}</b></div>
     <div class="kpi">Accuracy: <b>${accPct}%</b></div>
 
-    ${chartDataUrl ? `<h2 style="font-size:16px;margin:16px 0 8px;">Accuracy by Pitch Class</h2>
-    <img src="${chartDataUrl}" alt="Accuracy chart"/>` : ""}
+    ${chartDataUrl ? `
+      <h2 style="font-size:16px;margin:16px 0 8px;">Accuracy by Pitch Class</h2>
+      <img src="${chartDataUrl}" alt="Accuracy chart"/>
+    ` : ""}
 
     <div class="note">保存方法：PCは「PDFとして保存」、iPhoneは共有ボタンから「ファイルに保存」等を選択してください。</div>
 
@@ -759,13 +769,19 @@ function saveResultAsPDF() {
       <button onclick="window.print()">Print / Save as PDF</button>
     </div>
   </div>
-</body>
-</html>
-  `);
-  w.document.close();
 
-  // すぐ印刷を開きたい場合（好みで）
-  setTimeout(() => w.print(), 300);
+  <script>
+    // ★描画完了してから印刷（空白防止）
+    window.addEventListener('load', () => {
+      setTimeout(() => window.print(), 400);
+    });
+  </script>
+</body>
+</html>`;
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 
