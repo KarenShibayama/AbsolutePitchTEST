@@ -399,7 +399,7 @@ async function startTest() {
         elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now (4 seconds).`;
       }, msUntilStart);
     
-      // ★重要：次のtrialへは「音開始から4秒」で固定
+      // 次のtrialへは「音開始から4秒」で固定
       trialTimeoutId = setTimeout(() => {
         if (!respondedThisTrial) {
           results.push({
@@ -479,7 +479,7 @@ async function startTest() {
   
     respondedThisTrial = true;
   
-    // ★すぐ次へ行かない：trialTimeoutが5秒後に進める
+    // すぐ次へ行かない：trialTimeoutが5秒後に進める
     elStatus.textContent = `Recorded. Waiting for the next sound...`;
   }
 
@@ -683,7 +683,7 @@ function toCSV(rows) {
 function downloadCSV() {
   if (!results.length) return;
 
-  // CSV生成
+  // ====== CSV生成 ======
   if (!results.length) return;
 
   const { nCorrect, total } = calcAccuracy();
@@ -812,7 +812,7 @@ async function sendOnce() {
     return true;
   }
 
-  setStatus("送信中…（数秒かかることがあります）");
+  setStatus("Sending... (may take a few seconds)");
 
   const ok = await sendDataToGAS({
     ID,
@@ -822,9 +822,9 @@ async function sendOnce() {
 
   if (ok) {
     alreadySent = true;
-    setStatus("送信されました。");
+    setStatus("Sent");
   } else {
-    setStatus("送信に失敗しました。通信状態を確認して、もう一度押してください。", true);
+    setStatus("Failed to send. Please check your connection and try again.", true);
   }
 
   return ok;

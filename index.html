@@ -96,6 +96,9 @@
     }
 
     #keyboard { overflow: hidden; } /* 1pxズレでスクロールバーが出るのを防ぐ */
+    
+    #rowSave {max-width: 560px; }          /* keyboardのmaxに合わせる */  
+    #rowSave button {flex: 1 1 220px; }   /* モバイルで2つが落ちにくいように */
     </style>
 </head>
 <body>
@@ -103,13 +106,13 @@
 
   <div class="row">
     <label for="ID"><b>ID / Name</b></label>
-    <input id="ID" type="text" placeholder="例: s01 / Michael" />
+    <input id="ID" type="text" placeholder="EX: S01 / Michael" />
   </div>
 
-  <div class="row">
+  <div class="row" id="rowStart">
     <button id="btnStart">Start</button>
-    <button id="btnDownload" disabled>Download CSV</button>
-    <button id="btnPdf" disabled>Save Result PDF</button>
+    <button id="btnVolPlay" disabled>Volume Check Play</button>
+    <button id="btnVolOK" disabled>Volume OK (Begin)</button>
   </div>
 
   <div id="status">Not yet started</div>
@@ -117,14 +120,13 @@
   <div id="summary"></div>
   <canvas id="accChart" style="display:none; width:100%; height:220px;"></canvas>
   
-  <div class="row">
-    <button id="btnVolPlay" disabled>Volume Check Play</button>
-    <button id="btnVolOK" disabled>Volume OK (Begin)</button>
-  </div>
 
   <h2>Response</h2>
   <div id="keyboard" class="keyboard"></div>
-
+  <div class="row" id="rowSave">
+  <button id="btnDownload" disabled>Download CSV</button>
+  <button id="btnPdf" disabled>Save Result PDF</button>
+</div>
   <script src="test.js" defer></script>
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyosBgeLvwZwKsoXqC6h8wKzyJd33iDaFIJCbYfTy5VJmcijKLXLeVbShL1lc5V9ZYU/exec";
