@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AP Task</title>
+  <title>AP Test</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 24px; }
     .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 10px 0; }
@@ -84,6 +84,7 @@
       border-width: 1px;          /* 押しても太さが変わらないよう固定 */
       padding: 0;                 /* 既に0だが念のため */
       line-height: 1;             /* フォント差で高さが揺れないように */
+      -webkit-appearance: none; appearance: none;
     }
 
     #keyboard .key:focus,
@@ -98,11 +99,11 @@
     </style>
 </head>
 <body>
-  <h1>Absolute Pitch Task</h1>
+  <h1>Absolute Pitch Test</h1>
 
   <div class="row">
-    <label for="subjId"><b>SubjID / Name</b></label>
-    <input id="subjId" type="text" placeholder="例: s01 / Michael" />
+    <label for="ID"><b>ID / Name</b></label>
+    <input id="ID" type="text" placeholder="例: s01 / Michael" />
   </div>
 
   <div class="row">
@@ -121,17 +122,17 @@
     <button id="btnVolOK" disabled>Volume OK (Begin)</button>
   </div>
 
-  <h2>Answer</h2>
+  <h2>Response</h2>
   <div id="keyboard" class="keyboard"></div>
 
-  <script src="task.js" defer></script>
+  <script src="test.js" defer></script>
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwfxnlJBGyUWGwOJ4PqtHbTbm5vN81ThpBTeqTMUOBx2810vv4sLx--TCZSgT8-5Ojd/exec";
     
-    async function sendDataToGAS({ subjID, task, payload }) {
+    async function sendDataToGAS({ ID, test, payload }) {
       const body = {
-        subjID,
-        task,
+        ID,
+        test,
         payload,
         userAgent: navigator.userAgent,
         clientTimeISO: new Date().toISOString(),
