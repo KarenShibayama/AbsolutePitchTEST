@@ -117,19 +117,19 @@
 
   <div id="status">Not yet started</div>
 
+  <h2>Response</h2>
+  <div id="keyboard" class="keyboard"></div><br>
+
   <div id="summary"></div>
   <canvas id="accChart" style="display:none; width:100%; height:220px;"></canvas>
-  
 
-  <h2>Response</h2>
-  <div id="keyboard" class="keyboard"></div>
   <div class="row" id="rowSave">
   <button id="btnDownload" disabled>Download CSV</button>
   <button id="btnPdf" disabled>Save Result PDF</button>
 </div>
   <script src="test.js" defer></script>
   <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbwFJmlDaAuluiYvZRkmP8WpyYCx4wboscw5zkZVV9JANHqBXZB7aUNekfdB1_fsc2vn/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzkDEqhjP3QgEZYg2PFk10xCcuEXNeDCJmGVY2hYW63KOT9aDBPWBk7wYKcIpUYJ0co/exec";
     
     async function sendDataToGAS({ ID, test, payload }) {
       const body = {

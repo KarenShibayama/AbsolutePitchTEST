@@ -396,7 +396,7 @@ async function startTest() {
       // 表示は「音が鳴る直前〜直後」に合わせる
       setTimeout(() => {
         tSoundOn = performance.now();
-        elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now (4 seconds).`;
+        elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now.`;
       }, msUntilStart);
     
       // 次のtrialへは「音開始から4秒」で固定
@@ -480,7 +480,7 @@ async function startTest() {
     respondedThisTrial = true;
   
     // すぐ次へ行かない：trialTimeoutが5秒後に進める
-    elStatus.textContent = `Recorded. Waiting for the next sound...`;
+    elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Waiting for the next sound...`;
   }
 
 
