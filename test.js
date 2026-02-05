@@ -492,7 +492,7 @@ function finishTest() {
     <b>You're done!</b><br>
     Correct answers：<b>${accText}</b><br>
     Accuracy rate：<b>${Math.round((nCorrect / total) * 100)}%</b><br>
-    Please click Download CSV.
+    Please click Download CSV or Save Result PDF.
     `;
     btnPdf.disabled = false;
     btnDownload.disabled = false;
