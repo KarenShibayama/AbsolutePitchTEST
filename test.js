@@ -342,7 +342,7 @@ async function startTest() {
 
     ID = (elID.value || "").trim();
     if (!ID) {
-      elStatus.textContent = "Please enter the Subject ID or Name.";
+      elStatus.textContent = "Please enter ID or Name.";
       return;
     }
   
@@ -816,7 +816,7 @@ async function sendOnce() {
 
   const ok = await sendDataToGAS({
     ID,
-    Test: "AP_Test_v1",
+    test: "AP_Test_v1",
     payload: { runId, results },
   });
 
