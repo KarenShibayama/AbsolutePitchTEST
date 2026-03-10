@@ -10,7 +10,11 @@
     input { padding: 10px; font-size: 16px; width: 240px; }
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 520px; }
     button { padding: 14px 10px; font-size: 16px; }
-    #status { margin: 12px 0; }
+    #status {
+      margin: 12px 0;
+      min-height: 2.6em;   /* ステータス文の改行有無で下の要素が動かないように固定 */
+      line-height: 1.3;
+    }
     select { padding: 10px; font-size: 16px; }
     .keyboard {
       position: relative;
