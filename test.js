@@ -746,22 +746,24 @@ function saveResultAsPDF() {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 
-        function canvasToDataURLWithWhiteBG(canvas, scale = 3) {
+        function canvasToDataURLForPrint(canvas, targetDpi = 300, targetWidthIn = 6.8) {
+          // 印刷時の表示幅(in)に対して、常に targetDpi になるようにピクセル数を作る
+          const targetW = Math.max(1, Math.round(targetDpi * targetWidthIn));
+          const targetH = Math.max(1, Math.round(targetW * (canvas.height / canvas.width)));
           const tmp = document.createElement("canvas");
-          tmp.width = Math.round(canvas.width * scale);
-          tmp.height = Math.round(canvas.height * scale);
+          tmp.width = targetW;
+          tmp.height = targetH;
         
           const ctx = tmp.getContext("2d");
           ctx.fillStyle = "#fff";
           ctx.fillRect(0, 0, tmp.width, tmp.height);
-          ctx.scale(scale, scale);
-          ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, tmp.width, tmp.height);
         
           return tmp.toDataURL("image/png");
         }
         // ---- saveResultAsPDF 内 ----
         const accChartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
-          ? canvasToDataURLWithWhiteBG(canvasAcc)
+          ? canvasToDataURLForPrint(canvasAcc, 300, 6.8)
           : "";
         const rtChartDataUrl = "";
 
@@ -787,7 +789,7 @@ function saveResultAsPDF() {
   h1 { font-size: 20px; margin: 0 0 10px; }
   .meta { color: #444; font-size: 14px; margin-bottom: 14px; }
   .kpi { font-size: 16px; margin: 8px 0; }
-  img { width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+  img.chart { width: 6.8in; max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
   .note { margin-top: 14px; font-size: 12px; color: #666; }
   @media print { button { display: none; } }
 </style>
@@ -801,12 +803,12 @@ function saveResultAsPDF() {
 
       ${accChartDataUrl ? `
     <h2 style="font-size:16px;margin:16px 0 8px;">Accuracy + Mean Reaction Time by Pitch Class</h2>
-    <img src="${accChartDataUrl}" alt="Combined chart"/>
+    <img class="chart" src="${accChartDataUrl}" alt="Combined chart"/>
     ` : ""}
 
     ${rtChartDataUrl ? `
       <h2 style="font-size:16px;margin:16px 0 8px;">Mean Reaction Time by Pitch Class</h2>
-      <img src="${rtChartDataUrl}" alt="RT chart"/>
+      <img class="chart" src="${rtChartDataUrl}" alt="RT chart"/>
     ` : ""}
 
     <div class="note">保存方法：PCは「PDFとして保存」、iPhoneは共有ボタンから「ファイルに保存」等を選択してください。</div>
