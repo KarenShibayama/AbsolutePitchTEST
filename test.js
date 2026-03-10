@@ -620,13 +620,6 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#333";
     ctx.fillText(lab, x + barW / 2, padT + plotH + 14);
-
-    // 反応時間の有効データ数（n）
-    if (rtCounts.length === n) {
-      ctx.font = "10px system-ui, sans-serif";
-      ctx.fillText(`n=${rtCounts[i]}`, x + barW / 2, padT + plotH + 30);
-      ctx.font = "12px system-ui, sans-serif";
-    }
   }
 
   if (meansSec.length === n) {
@@ -649,30 +642,11 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
       ctx.fillText(`${rt.toFixed(1)}s`, padL + plotW + 6, y + 1);
     });
 
-    // 折れ線（count=0は欠測として線を切る）
-    ctx.strokeStyle = "#2f5f86";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    let drawing = false;
+    // 反応時間は点のみ（重なりを減らして可読性を優先）
     for (let i = 0; i < n; i++) {
       if ((rtCounts[i] || 0) <= 0) {
-        drawing = false;
         continue;
       }
-      const x = padL + i * (barW + gap) + barW / 2;
-      const y = padT + plotH - (Math.min(meansSec[i], yMaxRT) / yMaxRT) * plotH;
-      if (!drawing) {
-        ctx.moveTo(x, y);
-        drawing = true;
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.stroke();
-
-    // 点と平均値ラベル
-    for (let i = 0; i < n; i++) {
-      if ((rtCounts[i] || 0) <= 0) continue;
       const x = padL + i * (barW + gap) + barW / 2;
       const y = padT + plotH - (Math.min(meansSec[i], yMaxRT) / yMaxRT) * plotH;
 
