@@ -11,7 +11,7 @@
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 520px; }
     button { padding: 14px 10px; font-size: 16px; }
     #status { margin: 12px 0; }
-    
+    select { padding: 10px; font-size: 16px; }
     .keyboard {
       position: relative;
       width: min(100%, 560px);   /* 画面幅に合わせて縮む */
@@ -108,6 +108,53 @@
     <label for="ID"><b>ID / Name</b></label>
     <input id="ID" type="text" placeholder="EX: S01 / Michael" />
   </div>
+  <!-- ===== Demographics ===== -->
+  <div class="row">
+    <label for="sex"><b>Sex</b></label>
+    <select id="sex">
+      <option value="">Select...</option>
+      <option value="F">F</option>
+      <option value="M">M</option>
+      <option value="Other">Other / Prefer not to say</option>
+    </select>
+
+    <label for="age"><b>Age</b></label>
+    <input id="age" type="number" min="0" max="120" placeholder="e.g., 23" style="width:120px;" />
+  </div>
+
+  <!-- ===== Instruments (multiple rows) ===== -->
+  <div class="row" style="align-items:flex-start;">
+    <div>
+      <div style="font-weight:700;margin-bottom:6px;">Instruments</div>
+      <div class="row" id="instRows" style="margin:0;">
+        <div class="row instRow" style="margin:0;">
+          <select class="instName">
+            <option value="">Select...</option>
+            <option value="non-musician">non-musician</option>
+            <option value="piano">piano</option>
+            <option value="violin">violin</option>
+            <option value="flute">flute</option>
+            <option value="clarinet">clarinet</option>
+            <option value="saxophone">saxophone</option>
+            <option value="trumpet">trumpet</option>
+            <option value="trombone">trombone</option>
+            <option value="cello">cello</option>
+            <option value="guitar">guitar</option>
+            <option value="voice">voice</option>
+            <option value="other">other</option>
+          </select>
+
+          <input class="instStart" type="number" min="0" max="120" placeholder="start age" style="width:120px;" />
+          <input class="instEnd" type="number" min="0" max="120" placeholder="end age" style="width:120px;" />
+          <input class="instOther" type="text" placeholder="if other, type name" style="width:180px; display:none;" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <button type="button" id="btnAddInst" onclick="addInstrumentRow()">+ Add instrument</button>
+      </div>
+    </div>
+  </div>
 
   <div class="row" id="rowStart">
     <button id="btnStart">Start</button>
@@ -122,6 +169,7 @@
 
   <div id="summary"></div>
   <canvas id="accChart" style="display:none; width:100%; height:220px;"></canvas>
+  <canvas id="rtChart" style="display:none; width:100%; height:220px; margin-top:12px;"></canvas>
 
   <div class="row" id="rowSave">
   <button id="btnDownload" disabled>Download CSV</button>
@@ -129,7 +177,7 @@
 </div>
   <script src="test.js" defer></script>
   <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzkDEqhjP3QgEZYg2PFk10xCcuEXNeDCJmGVY2hYW63KOT9aDBPWBk7wYKcIpUYJ0co/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbx4sW0fxcCBf8sJ3JdknykPN6ai4zh4LEDK78EC9E2lS5q5FE2l0R_W4zQhV-Jkoyir/exec";
     
     async function sendDataToGAS({ ID, test, payload }) {
       const body = {

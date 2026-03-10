@@ -56,10 +56,15 @@ const elStatus = document.getElementById("status");
 const btnStart = document.getElementById("btnStart");
 const btnDownload = document.getElementById("btnDownload");
 const elID = document.getElementById("ID");
+const elSex = document.getElementById("sex");
+const elAge = document.getElementById("age");
+const elInstRows = document.getElementById("instRows");
+const btnAddInst = document.getElementById("btnAddInst");
 const btnVolPlay = document.getElementById("btnVolPlay");
 const btnVolOK   = document.getElementById("btnVolOK");
 const elSummary = document.getElementById("summary");
 const canvasAcc = document.getElementById("accChart");
+const canvasRT = document.getElementById("rtChart");
 const elKeyboard = document.getElementById("keyboard");
 const audioBufferCache = new Map(); // midi -> AudioBuffer
 const VOLUME_CHECK_MIDI = 69; // A4(440Hz)相当のファイルがある前提。なければ変更
@@ -364,13 +369,14 @@ async function startTest() {
   let respondedThisTrial = false;
   
   async function nextTrial() {
-    // 前のタイマーが残ってたら消す
+
     if (trialTimeoutId) {
       clearTimeout(trialTimeoutId);
       trialTimeoutId = null;
     }
   
     trialIndex++;
+  
     if (trialIndex >= trials.length) {
       finishTest();
       return;
@@ -380,77 +386,60 @@ async function startTest() {
     respondedThisTrial = false;
     canRespond = false;
   
-    elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Now playing...`;
+    elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length} : Loading...`;
   
     try {
-      elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Loading...`;
-    
+  
       const startAt = await playMidi(current.midi);
-    
-      // “予約したstartAt”をperformance.now()に換算（厳密ではないが十分安定）
+  
       const nowCtx = audioCtx.currentTime;
       const msUntilStart = Math.max(0, (startAt - nowCtx) * 1000);
-    
-      canRespond = true;
-    
-      // 表示は「音が鳴る直前〜直後」に合わせる
+  
+      // 音オンセットの瞬間
       setTimeout(() => {
+  
         tSoundOn = performance.now();
-        elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Answer now.`;
+        canRespond = true;
+  
+        elStatus.textContent =
+          `Trial ${trialIndex + 1} / ${trials.length} : Answer now`;
+  
+        // ★ここが重要
+        // 音オンセットから5秒で必ず次へ
+        trialTimeoutId = setTimeout(() => {
+  
+          if (!respondedThisTrial) {
+  
+            results.push({
+              ID,
+              trial: trialIndex + 1,
+              midi: current.midi,
+              file: current.file,
+              target: current.target,
+              target_solfege: midiToPcOct(current.midi).solfege,
+              response: "",
+              response_solfege: "",
+              correct: 0,
+              rt_ms: "",
+              no_response: 1
+            });
+  
+          }
+  
+          canRespond = false;
+          nextTrial();
+  
+        }, TRIAL_MS);
+  
       }, msUntilStart);
-    
-      // 次のtrialへは「音開始から4秒」で固定
-      trialTimeoutId = setTimeout(() => {
-        if (!respondedThisTrial) {
-          results.push({
-            ID,
-            trial: trialIndex + 1,
-            midi: current.midi,
-            file: current.file,
-            target: current.target,
-            target_solfege: midiToPcOct(current.midi).solfege,
-            response: "",
-            response_solfege: "",
-            correct: 0,
-            rt_ms: "",
-            no_response: 1
-          });
-        }
-        canRespond = false;
-        nextTrial();
-      }, msUntilStart + TRIAL_MS);
-    
+  
     } catch (e) {
+  
       elStatus.textContent = String(e.message || e);
       btnStart.disabled = false;
       elID.disabled = false;
-      return;
+  
     }
-  
-    // ★ここが重要：trial開始から4秒後に必ず次へ（回答の有無に関係なし）
-    const elapsed = performance.now() - trialStartPerf;
-    const remain = Math.max(0, TRIAL_MS - elapsed);
-  
-    trialTimeoutId = setTimeout(() => {
-      // 無回答なら無回答行を記録してから次へ
-      if (!respondedThisTrial) {
-        results.push({
-          ID,
-          trial: trialIndex + 1,
-          midi: current.midi,
-          file: current.file,
-          target: current.target,
-          target_solfege: midiToPcOct(current.midi).solfege,
-          response: "",
-          response_solfege: "",
-          correct: 0,
-          rt_ms: "",
-          no_response: 1
-        });
-      }
-      canRespond = false;
-      nextTrial();
-    }, remain);
   }
 
   function handleResponse(resp) {
@@ -499,13 +488,17 @@ function finishTest() {
     btnStart.disabled = false;
     elID.disabled = false;
     
-    // --- 音階音ごとの正答率グラフ ---
+    // --- 統合グラフ（正答率バー + 反応時間折れ線） ---
     const { labels, rates, totals } = calcAccuracyByPitchClass();
+    const { meansSec, counts } = calcMeanRTByPitchClass();
     canvasAcc.style.display = "block";
-    drawBarChartAccuracy(canvasAcc, labels, rates, totals);
-  
+    drawBarChartAccuracy(canvasAcc, labels, rates, totals, meansSec, counts);
+    canvasRT.style.display = "none";
+
     // 画面リサイズで再描画（1回だけ設定）
-    window.onresize = () => drawBarChartAccuracy(canvasAcc, labels, rates, totals);
+    window.onresize = () => {
+      drawBarChartAccuracy(canvasAcc, labels, rates, totals, meansSec, counts);
+    };
   
 }
 
@@ -544,10 +537,10 @@ function labelForDisplay(pcSharp) {
   return idx >= 0 ? SOLFEGE_NAMES[idx] : pcSharp;
 }
 
-function drawBarChartAccuracy(canvas, labelsSharp, rates, totals) {
+function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [], rtCounts = []) {
   // ★ 鍵盤の幅に揃える
   const cssW = elKeyboard.getBoundingClientRect().width;
-  const cssH = 220;
+  const cssH = 250;
 
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = cssW + "px";
@@ -561,9 +554,16 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals) {
   ctx.clearRect(0, 0, cssW, cssH);
 
   // 余白
-  const padL = 40, padR = 10, padT = 10, padB = 40;
+  const padL = 48, padR = 52, padT = 34, padB = 46;
   const plotW = cssW - padL - padR;
   const plotH = cssH - padT - padB;
+
+  ctx.fillStyle = "#333";
+  ctx.font = "bold 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Accuracy + Mean Reaction Time by Pitch Class", padL + plotW / 2, 13);
+  ctx.font = "12px system-ui, sans-serif";
 
   // 軸（0〜100%）
   ctx.strokeStyle = "#333";
@@ -577,6 +577,8 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals) {
   // 目盛（0,50,100）
   ctx.fillStyle = "#333";
   ctx.font = "12px system-ui, sans-serif";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
   [0, 0.5, 1].forEach(v => {
     const y = padT + plotH - v * plotH;
     ctx.strokeStyle = "#ddd";
@@ -586,7 +588,7 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals) {
     ctx.stroke();
 
     ctx.fillStyle = "#333";
-    ctx.fillText(`${Math.round(v*100)}%`, 4, y + 4);
+    ctx.fillText(`${Math.round(v*100)}%`, padL - 6, y + 1);
   });
 
   // Bar
@@ -614,20 +616,76 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals) {
 
     // xラベル（表示モードに合わせる）
     const lab = prettyLabel(labelForDisplay(labelsSharp[i]));
-    ctx.save();
-    ctx.translate(x + barW / 2, padT + plotH + 14);
-    ctx.rotate(-Math.PI / 6); // 少し斜め
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#333";
-    ctx.fillText(lab, 0, 0);
-    ctx.restore();
+    ctx.fillText(lab, x + barW / 2, padT + plotH + 14);
 
-    // 出題数（小さく）
-    ctx.fillStyle = "#333";
-    ctx.font = "10px system-ui, sans-serif";
-    ctx.fillText(`n=${totals[i]}`, x + 1, padT + plotH + 32);
-    ctx.font = "12px system-ui, sans-serif";
+    // 反応時間の有効データ数（n）
+    if (rtCounts.length === n) {
+      ctx.font = "10px system-ui, sans-serif";
+      ctx.fillText(`n=${rtCounts[i]}`, x + barW / 2, padT + plotH + 30);
+      ctx.font = "12px system-ui, sans-serif";
+    }
+  }
+
+  if (meansSec.length === n) {
+    const yMaxRT = 4.0; // 反応時間の右軸は 4.0s 固定
+
+    // 右軸（反応時間）
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL + plotW, padT);
+    ctx.lineTo(padL + plotW, padT + plotH);
+    ctx.stroke();
+
+    ctx.fillStyle = "#2f5f86";
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    [0, 1, 2, 3, 4].forEach(rt => {
+      const y = padT + plotH - (rt / yMaxRT) * plotH;
+      ctx.fillText(`${rt.toFixed(1)}s`, padL + plotW + 6, y + 1);
+    });
+
+    // 折れ線（count=0は欠測として線を切る）
+    ctx.strokeStyle = "#2f5f86";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let drawing = false;
+    for (let i = 0; i < n; i++) {
+      if ((rtCounts[i] || 0) <= 0) {
+        drawing = false;
+        continue;
+      }
+      const x = padL + i * (barW + gap) + barW / 2;
+      const y = padT + plotH - (Math.min(meansSec[i], yMaxRT) / yMaxRT) * plotH;
+      if (!drawing) {
+        ctx.moveTo(x, y);
+        drawing = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    // 点と平均値ラベル
+    for (let i = 0; i < n; i++) {
+      if ((rtCounts[i] || 0) <= 0) continue;
+      const x = padL + i * (barW + gap) + barW / 2;
+      const y = padT + plotH - (Math.min(meansSec[i], yMaxRT) / yMaxRT) * plotH;
+
+      ctx.fillStyle = "#2f5f86";
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = "10px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${meansSec[i].toFixed(2)}s`, x, y - 8);
+      ctx.font = "12px system-ui, sans-serif";
+    }
   }
 }
 
@@ -714,26 +772,24 @@ function saveResultAsPDF() {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 
-      function canvasToDataURLWithWhiteBG(canvas) {
+        function canvasToDataURLWithWhiteBG(canvas, scale = 3) {
           const tmp = document.createElement("canvas");
-          tmp.width = canvas.width;
-          tmp.height = canvas.height;
+          tmp.width = Math.round(canvas.width * scale);
+          tmp.height = Math.round(canvas.height * scale);
         
           const ctx = tmp.getContext("2d");
-          // 背景を白で塗る
           ctx.fillStyle = "#fff";
           ctx.fillRect(0, 0, tmp.width, tmp.height);
+          ctx.scale(scale, scale);
+          ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
         
-          // 元canvasを上に描く
-          ctx.drawImage(canvas, 0, 0);
-        
-          // PNGでもJPEGでもOK（PNGの方が綺麗）
           return tmp.toDataURL("image/png");
-      }
+        }
         // ---- saveResultAsPDF 内 ----
-        const chartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
+        const accChartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
           ? canvasToDataURLWithWhiteBG(canvasAcc)
           : "";
+        const rtChartDataUrl = "";
 
   const { nCorrect, total } = calcAccuracy();
   const accPct = Math.round((nCorrect / total) * 100);
@@ -769,9 +825,14 @@ function saveResultAsPDF() {
     <div class="kpi">Correct: <b>${nCorrect} / ${total}</b></div>
     <div class="kpi">Accuracy: <b>${accPct}%</b></div>
 
-    ${chartDataUrl ? `
-      <h2 style="font-size:16px;margin:16px 0 8px;">Accuracy by Pitch Class</h2>
-      <img src="${chartDataUrl}" alt="Accuracy chart"/>
+      ${accChartDataUrl ? `
+    <h2 style="font-size:16px;margin:16px 0 8px;">Accuracy + Mean Reaction Time by Pitch Class</h2>
+    <img src="${accChartDataUrl}" alt="Combined chart"/>
+    ` : ""}
+
+    ${rtChartDataUrl ? `
+      <h2 style="font-size:16px;margin:16px 0 8px;">Mean Reaction Time by Pitch Class</h2>
+      <img src="${rtChartDataUrl}" alt="RT chart"/>
     ` : ""}
 
     <div class="note">保存方法：PCは「PDFとして保存」、iPhoneは共有ボタンから「ファイルに保存」等を選択してください。</div>
@@ -845,6 +906,221 @@ async function onSavePDF() {
 
   saveResultAsPDF(); // ← save only（do not send）
 }
+
+function getDemographics() {
+  const sex = (elSex?.value || "").trim();
+  const age = (elAge?.value || "").trim();
+
+  // instruments: 複数行を [{name,start,end}] で回収
+  const rows = Array.from(document.querySelectorAll("#instRows .instRow"));
+  const instruments = rows.map(r => {
+    const nameSel = r.querySelector(".instName");
+    const startEl = r.querySelector(".instStart");
+    const endEl   = r.querySelector(".instEnd");
+    const otherEl = r.querySelector(".instOther");
+
+    let name = (nameSel?.value || "").trim();
+    if (name === "other") {
+      name = (otherEl?.value || "").trim();
+    }
+
+    const start = (startEl?.value || "").trim();
+    const endRaw = (endEl?.value || "").trim();
+    const end = endRaw.toLowerCase() === "present" ? "present" : endRaw;
+
+    return { name, startAge: start, endAge: end };
+  }).filter(x => x.name || x.startAge || x.endAge); // 空行は捨てる
+
+  return { sex, age, instruments };
+}
+
+function wireInstrumentUI() {
+  if (!btnAddInst) return;
+
+  // other選択時だけ自由入力を表示
+  const toggleOther = (row) => {
+    const sel = row.querySelector(".instName");
+    const other = row.querySelector(".instOther");
+    if (!sel || !other) return;
+    const isOther = sel.value === "other";
+    other.style.display = isOther ? "inline-block" : "none";
+  };
+
+  // 既存1行にも付ける
+  document.querySelectorAll("#instRows .instRow").forEach(r => {
+    const sel = r.querySelector(".instName");
+    if (sel) sel.addEventListener("change", () => toggleOther(r));
+    toggleOther(r);
+  });
+
+  btnAddInst.addEventListener("click", () => {
+    const base = document.querySelector("#instRows .instRow");
+    if (!base) return;
+
+    const clone = base.cloneNode(true);
+    // 値をクリア
+    clone.querySelectorAll("input").forEach(i => i.value = "");
+    clone.querySelectorAll("select").forEach(s => s.value = "");
+    // otherは隠す
+    const other = clone.querySelector(".instOther");
+    if (other) other.style.display = "none";
+
+    // changeイベント付け直し
+    const sel = clone.querySelector(".instName");
+    if (sel) sel.addEventListener("change", () => {
+      const o = clone.querySelector(".instOther");
+      if (o) o.style.display = (sel.value === "other") ? "inline-block" : "none";
+    });
+
+    elInstRows.appendChild(clone);
+  });
+}
+
+function calcMeanRTByPitchClass() {
+  const stat = {};
+  NOTE_NAMES.forEach(n => stat[n] = { sum: 0, n: 0 });
+
+  for (const r of results) {
+    if (typeof r.trial !== "number") continue;
+    if (!r.target || !(r.target in stat)) continue;
+    if (r.correct !== 1) continue; // RTは正答試行のみで平均
+    if (r.rt_ms === "" || r.rt_ms == null || Number.isNaN(Number(r.rt_ms))) continue;
+
+    stat[r.target].sum += Number(r.rt_ms);
+    stat[r.target].n += 1;
+  }
+
+  const labels = NOTE_NAMES.slice();
+  const meansSec = labels.map(n => {
+    const s = stat[n];
+    return s.n ? (s.sum / s.n) / 1000 : 0;
+  });
+  const counts = labels.map(n => stat[n].n);
+  return { labels, meansSec, counts };
+}
+
+function drawBarChartRT(canvas, labelsSharp, meansSec, counts) {
+  const cssW = elKeyboard.getBoundingClientRect().width;
+  const cssH = 220;
+
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = cssW + "px";
+  canvas.style.height = cssH + "px";
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.clearRect(0, 0, cssW, cssH);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  const padL = 46, padR = 10, padT = 28, padB = 40;
+  const plotW = cssW - padL - padR;
+  const plotH = cssH - padT - padB;
+
+  ctx.fillStyle = "#333";
+  ctx.font = "bold 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Mean Reaction Time by Pitch Class", padL + plotW / 2, 12);
+  ctx.font = "12px system-ui, sans-serif";
+
+  const maxVal = Math.max(1.0, ...meansSec);
+  const yMax = Math.ceil(maxVal * 10) / 10;
+
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, padT + plotH);
+  ctx.lineTo(padL + plotW, padT + plotH);
+  ctx.stroke();
+
+  const ticks = 4;
+  ctx.fillStyle = "#333";
+  ctx.font = "12px system-ui, sans-serif";
+  for (let i = 0; i <= ticks; i++) {
+    const v = (yMax / ticks) * i;
+    const y = padT + plotH - (v / yMax) * plotH;
+    ctx.strokeStyle = "#ddd";
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+    ctx.fillStyle = "#333";
+    ctx.fillText(`${v.toFixed(1)}s`, 4, y + 4);
+  }
+
+  const n = labelsSharp.length;
+  const gap = 6;
+  const barW = Math.max(6, (plotW - gap * (n - 1)) / n);
+
+  for (let i = 0; i < n; i++) {
+    const val = meansSec[i];
+    const x = padL + i * (barW + gap);
+    const h = (val / yMax) * plotH;
+    const y = padT + plotH - h;
+
+    const pc = labelsSharp[i];
+    const black = pc.includes("#");
+
+    ctx.fillStyle = black ? "#888" : "#fff";
+    ctx.strokeStyle = "#333";
+    ctx.fillRect(x, y, barW, h);
+    ctx.strokeRect(x, y, barW, h);
+
+    const lab = prettyLabel(labelForDisplay(labelsSharp[i]));
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#333";
+    ctx.fillText(lab, x + barW / 2, padT + plotH + 14);
+
+    ctx.fillStyle = "#333";
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.fillText(`n=${counts[i]}`, x + 1, padT + plotH + 32);
+    ctx.font = "12px system-ui, sans-serif";
+  }
+}
+
+// ===== Instruments UI (minimal) =====
+window.addInstrumentRow = function addInstrumentRow() {
+  const elInstRows = document.getElementById("instRows");
+  if (!elInstRows) return;
+
+  elInstRows.insertAdjacentHTML("beforeend", `
+    <div class="row instRow" style="margin:0;">
+      <select class="instName" onchange="toggleOtherInput(this)">
+        <option value="">Select...</option>
+        <option value="non-musician">non-musician</option>
+        <option value="piano">piano</option>
+        <option value="violin">violin</option>
+        <option value="flute">flute</option>
+        <option value="clarinet">clarinet</option>
+        <option value="saxophone">saxophone</option>
+        <option value="trumpet">trumpet</option>
+        <option value="trombone">trombone</option>
+        <option value="cello">cello</option>
+        <option value="guitar">guitar</option>
+        <option value="voice">voice</option>
+        <option value="other">other</option>
+      </select>
+
+      <input class="instStart" type="number" min="0" max="120" placeholder="start age" style="width:120px;" />
+      <input class="instEnd" type="number" min="0" max="120" placeholder="end age" style="width:120px;" />
+      <input class="instOther" type="text" placeholder="if other, type name" style="width:180px; display:none;" />
+    </div>
+  `);
+};
+
+  // other の時だけ自由入力を表示
+  window.toggleOtherInput = function toggleOtherInput(sel) {
+    const row = sel.closest(".instRow");
+    const other = row.querySelector(".instOther");
+    if (!other) return;
+    other.style.display = (sel.value === "other") ? "inline-block" : "none";
+  };
 
 btnStart.addEventListener("click", startTest);
 btnVolPlay.addEventListener("click", volumePlay);
