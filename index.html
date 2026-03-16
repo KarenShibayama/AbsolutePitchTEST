@@ -8,37 +8,51 @@
     body { font-family: system-ui, sans-serif; margin: 24px; }
     .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 10px 0; }
     input { padding: 10px; font-size: 16px; width: 240px; }
+    input.invalid-field, select.invalid-field {
+      border: 2px solid rgba(217, 48, 37, 0.5) !important;
+      background: rgba(255, 246, 246, 0.5);
+      border-radius: 4px;
+    }
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 520px; }
     button { padding: 14px 10px; font-size: 16px; }
     #status {
       margin: 12px 0;
-      min-height: 2.6em;   /* ステータス文の改行有無で下の要素が動かないように固定 */
+      min-height: 2.6em;   /* Keep lower elements fixed regardless of status line wrapping */
       line-height: 1.3;
+    }
+    #status.compact {
+      min-height: 1.3em;
+      margin-bottom: 4px;
     }
     select { padding: 10px; font-size: 16px; }
     .keyboard {
       position: relative;
-      width: min(100%, 560px);   /* 画面幅に合わせて縮む */
+      width: min(100%, 560px);   /* Shrinks to fit viewport width */
       height: 180px;
       margin-top: 16px;
       user-select: none;
+      border-radius: 10px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #f7f7f7 0%, #ececec 100%);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
 
-    /* 白鍵：7本。割合で幅を決める */
+    /* White keys: 7 keys, width based on percentage */
     .key.white {
       position: absolute;
       bottom: 0;
       width: calc(100% / 7);
       height: 180px;
-      background: white;
-      border: 1px solid #333;
+      background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 72%, #ececec 100%);
+      border: 1px solid #4a4a4a;
       box-sizing: border-box;
-      border-radius: 0 0 6px 6px;
+      border-radius: 0 0 4px 4px;
       padding: 0;
       cursor: pointer;
+      box-shadow: inset 0 -8px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.85);
     }
 
-    /* 白鍵ラベル：下 */
+    /* White-key labels: bottom */
     .key.white .label {
       position: absolute;
       left: 0; right: 0;
@@ -48,46 +62,54 @@
       color: #111;
     }
 
-    /* 黒鍵：白鍵幅のだいたい60% */
+    /* Black keys: about 60% of white-key width */
     .key.black {
       position: absolute;
       top: 0;
       width: calc((100% / 7) * 0.62);
       height: 110px;
-      background: #111;
+      background: linear-gradient(180deg, #3d3d3d 0%, #1e1e1e 48%, #0f0f0f 100%);
       color: white;
       z-index: 2;
-      border: 1px solid #000;
+      border: 1px solid #060606;
       border-radius: 0 0 6px 6px;
       padding: 0;
       cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4), inset 0 -5px 7px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
     }
 
-    /* 黒鍵ラベル：中央 */
+    /* Black-key labels: centered */
     .key.black .label {
       position: absolute;
       left: 0; right: 0;
       top: 50%;
       transform: translateY(-50%);
       text-align: center;
-      font-size: 13px;
+      font-size: 11px;
       color: #fff;
     }
 
-    /* 押下ハイライト（JSで付け外し） */
-    .key.pressed.white { background: #d9e8ff; }
-    .key.pressed.black { background: #3a3a3a; }
+    /* Press highlight (toggled by JS) */
+    .key.pressed.white {
+      background: linear-gradient(180deg, #f1f6ff 0%, #e7eefc 100%);
+      box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.12);
+    }
+    .key.pressed.black {
+      background: linear-gradient(180deg, #5a6f8b 0%, #31445d 100%);
+      border-color: #1f2d3f;
+      box-shadow: inset 0 3px 10px rgba(255, 255, 255, 0.22), 0 1px 2px rgba(0, 0, 0, 0.55);
+    }
 
-    /* 触ったときに選択が出ないように */
+    /* Disable tap highlight */
     .key { -webkit-tap-highlight-color: transparent; }
     
-    /* ===== クリック/フォーカスでレイアウトがズレないように固定 ===== */
+    /* ===== Prevent layout shifts on click/focus ===== */
     #keyboard .key{
       box-sizing: border-box;
-      outline: none;              /* フォーカス輪郭でズレるのを防ぐ */
-      border-width: 1px;          /* 押しても太さが変わらないよう固定 */
-      padding: 0;                 /* 既に0だが念のため */
-      line-height: 1;             /* フォント差で高さが揺れないように */
+      outline: none;              /* Prevent focus outline from shifting layout */
+      border-width: 1px;          /* Keep border thickness fixed on press */
+      padding: 0;                 /* Already 0, kept explicitly for safety */
+      line-height: 1;             /* Avoid height jitter across fonts */
       -webkit-appearance: none; appearance: none;
     }
 
@@ -95,14 +117,34 @@
     #keyboard .key:focus-visible,
     #keyboard .key:active{
       outline: none;
-      box-shadow: none;           /* 影で見た目が動くのを防ぐ */
-      transform: none;            /* 押下時の微妙な移動を無効化 */
+      box-shadow: none;           /* Prevent visual movement caused by shadow */
+      transform: none;            /* Disable subtle movement on press */
     }
 
-    #keyboard { overflow: hidden; } /* 1pxズレでスクロールバーが出るのを防ぐ */
+    #keyboard { overflow: hidden; } /* Prevent scrollbars from 1px shifts */
     
-    #rowSave {max-width: 560px; }          /* keyboardのmaxに合わせる */  
-    #rowSave button {flex: 1 1 220px; }   /* モバイルで2つが落ちにくいように */
+    #rowSave {max-width: 560px; }          /* Match keyboard max width */  
+    #rowSave button {flex: 1 1 220px; }   /* Keep two buttons from wrapping on mobile */
+    #summary { width: min(100%, 560px); margin: 10px 0 12px; }
+    .result-panel { border: 1px solid #dbe4f0; background: #f7f9fc; border-radius: 12px; padding: 12px; }
+    .result-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+    .kpi-card { background: #fff; border: 1px solid #e2e8f2; border-radius: 8px; padding: 8px 10px; }
+    .kpi-label { font-size: 12px; color: #5f6b7a; }
+    .kpi-value { font-size: 20px; font-weight: 700; color: #1f2a37; line-height: 1.1; margin-top: 2px; }
+    .kpi-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .insight-row { margin-top: 8px; font-size: 13px; color: #334155; }
+    #labelModeChooser {
+      display: none;
+      width: min(100%, 560px);
+      border: none;
+      border-radius: 0;
+      padding: 0;
+      margin: 0 0 10px;
+      background: transparent;
+    }
+    #labelModeChooser .title { font-weight: 400; margin-bottom: 6px; color: #111; }
+    #labelModeChooser .opt { margin: 6px 0; display:block; color: #111; }
     </style>
 </head>
 <body>
@@ -145,6 +187,7 @@
             <option value="cello">cello</option>
             <option value="guitar">guitar</option>
             <option value="voice">voice</option>
+            <option value="percussion">percussion</option>
             <option value="other">other</option>
           </select>
 
@@ -163,10 +206,16 @@
   <div class="row" id="rowStart">
     <button id="btnStart">Start</button>
     <button id="btnVolPlay" disabled>Volume Check Play</button>
-    <button id="btnVolOK" disabled>Volume OK (Begin)</button>
+    <button id="btnVolOK" disabled>Volume OK (Choose Labels)</button>
   </div>
 
   <div id="status">Not yet started</div>
+  <div id="labelModeChooser">
+    <div class="title">Please choose the note labels shown on the keyboard</div>
+    <label class="opt"><input type="radio" name="labelMode" value="sharp" checked> C, C♯/D♭, D ...</label>
+    <label class="opt"><input type="radio" name="labelMode" value="solfege"> Do, Do♯/Re♭, Re ...</label>
+    <button id="btnLabelModeStart" type="button">Start with this label style</button>
+  </div>
 
   <h2>Response</h2>
   <div id="keyboard" class="keyboard"></div><br>

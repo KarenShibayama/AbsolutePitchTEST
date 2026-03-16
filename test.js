@@ -1,6 +1,20 @@
-// ====== 設定 ======
+// ====== Configuration ======
 const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const SOLFEGE_NAMES = ["do","do#","re","re#","mi","fa","fa#","sol","sol#","la","la#","si"];
+const DISPLAY_LABELS_SOLFEGE = {
+  "C":  "Do",
+  "C#": "Do♯/Re♭",
+  "D":  "Re",
+  "D#": "Re♯/Mi♭",
+  "E":  "Mi",
+  "F":  "Fa",
+  "F#": "Fa♯/Sol♭",
+  "G":  "Sol",
+  "G#": "Sol♯/La♭",
+  "A":  "La",
+  "A#": "La♯/Si♭",
+  "B":  "Si"
+};
 const LABEL_TO_FILE = {
   "C": "C",
   "C#": "Cis",
@@ -31,16 +45,16 @@ const DISPLAY_LABELS = {
 };
 const AUDIO_DIR = "audio";
 
-// MIDI範囲に合わせて変更
+// Adjust to your MIDI range
 const MIN_MIDI = 36;  // 036-C2.wav
-const MAX_MIDI = 95;  // （必要に応じて調整）
+const MAX_MIDI = 95;  // adjust as needed
 
-const N_TRIALS = 60;     // 試行数
-const TRIAL_MS = 4000;         // 音提示〜次の音まで固定4秒
-const START_DELAY_MS = 5000;   // 音量OK後、開始まで5秒
+const N_TRIALS = 60;     // number of trials
+const TRIAL_MS = 4000;         // fixed 4s from tone onset to next tone
+const START_DELAY_MS = 5000;   // 5s delay after volume check OK
 
 
-// ====== 状態 ======
+// ====== State ======
 let trials = [];
 let trialIndex = -1;
 let current = null;
@@ -48,8 +62,8 @@ let tSoundOn = null;
 let canRespond = false;
 let results = [];
 let ID = "";
-// どちらを表示する？  "sharp" = C/C#表記,  "solfege" = do/re/mi表記
-let LABEL_MODE = "sharp";  // ←必要なら "solfege" に
+// Label mode: "sharp" = C/C#, "solfege" = do/re/mi
+let LABEL_MODE = "sharp";  // change to "solfege" if needed
 let runId = null;
 
 const elStatus = document.getElementById("status");
@@ -62,50 +76,51 @@ const elInstRows = document.getElementById("instRows");
 const btnAddInst = document.getElementById("btnAddInst");
 const btnVolPlay = document.getElementById("btnVolPlay");
 const btnVolOK   = document.getElementById("btnVolOK");
+const elLabelModeChooser = document.getElementById("labelModeChooser");
+const btnLabelModeStart = document.getElementById("btnLabelModeStart");
 const elSummary = document.getElementById("summary");
 const canvasAcc = document.getElementById("accChart");
 const canvasRT = document.getElementById("rtChart");
 const elKeyboard = document.getElementById("keyboard");
 const audioBufferCache = new Map(); // midi -> AudioBuffer
-const VOLUME_CHECK_MIDI = 69; // A4(440Hz)相当のファイルがある前提。なければ変更
+const VOLUME_CHECK_MIDI = 69; // assumes an A4(440Hz)-equivalent file exists; change if needed
 
-const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);// --- デバイス判定 ---
-    if (isMobile) {btnDownload.style.display = "none";}// btnPdf は表示されたまま（むしろ推奨）
+const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);// --- Device detection ---
+    if (isMobile) {btnDownload.style.display = "none";}// keep btnPdf visible (recommended)
 const btnPdf = document.getElementById("btnPdf");
 
 let inVolumeCheck = false;
 let audioCtx = null;
 
 function prettyLabel(s) {
-  // 表示専用：解析には使わない
+  // Display-only conversion (not used for analysis)
   return s.replace(/#/g, "♯");
 }
 
-// ====== UI生成 ======
+// ====== UI generation ======
 function buildChoiceButtons() {
   const keyboard = document.getElementById("keyboard");
   if (!keyboard) {
-    console.error('id="keyboard" が見つかりません');
+    console.error('id="keyboard" not found');
     return;
   }
   keyboard.innerHTML = "";
 
-  // 白鍵(7)と黒鍵(5)の配置（1オクターブ）
+  // White (7) and black (5) key layout for one octave
   const whiteKeys = ["C","D","E","F","G","A","B"];
   const blackKeys = [
-    { note: "C#", leftBase: 0 }, // CとDの間
-    { note: "D#", leftBase: 1 }, // DとEの間
-    { note: "F#", leftBase: 3 }, // FとGの間
-    { note: "G#", leftBase: 4 }, // GとAの間
-    { note: "A#", leftBase: 5 }, // AとBの間
+    { note: "C#", leftBase: 0, offset: 0.69 }, // between C and D
+    { note: "D#", leftBase: 1, offset: 0.71 }, // between D and E
+    { note: "F#", leftBase: 3, offset: 0.69 }, // between F and G
+    { note: "G#", leftBase: 4, offset: 0.70 }, // between G and A
+    { note: "A#", leftBase: 5, offset: 0.71 }, // between A and B
   ];
 
   const labelFor = (noteSharp) => {
     if (LABEL_MODE === "sharp") {
       return DISPLAY_LABELS[noteSharp] ?? noteSharp;
     }
-    const idx = NOTE_NAMES.indexOf(noteSharp);
-    return idx >= 0 ? SOLFEGE_NAMES[idx] : noteSharp;
+    return DISPLAY_LABELS_SOLFEGE[noteSharp] ?? noteSharp;
   };
 
   const pressFlash = (btn) => {
@@ -113,7 +128,7 @@ function buildChoiceButtons() {
     setTimeout(() => btn.classList.remove("pressed"), 120);
   };
 
-  // 白鍵
+  // White keys
   whiteKeys.forEach((note, i) => {
     const w = document.createElement("button");
     w.type = "button";
@@ -126,41 +141,42 @@ function buildChoiceButtons() {
     span.textContent = prettyLabel(labelFor(note));
     w.addEventListener("click", () => {
       pressFlash(w);
-      handleResponse(note); // 内部ラベルは C/D/E...
+      handleResponse(note); // internal label: C/D/E...
     });
 
     keyboard.appendChild(w);
   });
 
-  // 黒鍵
-  blackKeys.forEach(({ note, leftBase }) => {
+  // Black keys
+  blackKeys.forEach(({ note, leftBase, offset }) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "key black";
 
-    // 黒鍵は白鍵の境目より少し右に置く
-    // 0.70は見た目調整係数（好みで0.65〜0.75）
-    b.style.left = `calc((100% / 7) * (${leftBase} + 0.70))`;
+    // Place black keys slightly to the right of white-key boundaries
+    // Fine-tuned per key for a more realistic keyboard look
+    b.style.left = `calc((100% / 7) * (${leftBase} + ${offset}))`;
 
     const span = document.createElement("span");
     span.className = "label";
-    span.textContent = labelFor(note);
+    const blackLabel = labelFor(note);
+    span.textContent = blackLabel;
     b.appendChild(span);
 
     b.addEventListener("click", () => {
       pressFlash(b);
-      handleResponse(note); // 内部ラベルは C#...
+      handleResponse(note); // internal label: C#...
     });
 
     keyboard.appendChild(b);
   });
 }buildChoiceButtons();
 
-// ====== MIDI -> note/oct & ファイル名 ======
+// ====== MIDI -> note/octave & filename ======
 function midiToPcOct(m) {
-  const pcSharp = NOTE_NAMES[m % 12];          // 正誤判定の内部ラベル
-  const solfege = SOLFEGE_NAMES[m % 12];       // 表示用（ドレミ）
-  const pcFile  = LABEL_TO_FILE[pcSharp];      // 音ファイル名用
+  const pcSharp = NOTE_NAMES[m % 12];          // internal label for correctness checking
+  const solfege = SOLFEGE_NAMES[m % 12];       // display label (solfege)
+  const pcFile  = LABEL_TO_FILE[pcSharp];      // file label for audio filenames
   const oct = Math.floor(m / 12) - 1;
   return { pc: pcSharp, solfege, pcFile, oct };
 }
@@ -175,7 +191,7 @@ function filePathForMidi(m) {
   return `${AUDIO_DIR}/${midiToFilename(m)}`;
 }
 
-// ====== 音再生 ======
+// ====== Audio playback ======
 async function ensureAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state !== "running") await audioCtx.resume();
@@ -187,7 +203,7 @@ async function getAudioBuffer(m) {
   await ensureAudioCtx();
   const url = filePathForMidi(m);
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`音ファイルが見つかりません: ${url}`);
+  if (!res.ok) throw new Error(`Audio file not found: ${url}`);
   const buf = await res.arrayBuffer();
   const audioBuf = await audioCtx.decodeAudioData(buf);
 
@@ -202,14 +218,14 @@ async function playMidi(m) {
   src.buffer = audioBuf;
   src.connect(audioCtx.destination);
 
-  // 少し先に予約して再生（クリックノイズ/遅延ブレ軽減）
+  // Schedule slightly ahead to reduce click noise / timing jitter
   const startAt = audioCtx.currentTime + 0.03;
   src.start(startAt);
 
-  return startAt; // ★“音が鳴る予定の時刻”を返す
+  return startAt; // return the scheduled audio onset time
 }
 
-// ====== random化（MIDI範囲から試行を作る） ======
+// ====== Randomization (build trials from MIDI range) ======
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -224,27 +240,27 @@ function makeMidiPool() {
 }
 
 
-// ★ 60音(36..95)を全て1回ずつ使い、隣接差>=13を満たす順序を構成して返す
-// ====== random化（MIDI範囲から試行を作る） ======
-const MIN_INTERVAL = 13; // 制約固定：1オクターブ+半音
+// Use all 60 tones (36..95) exactly once and return an order that satisfies adjacent diff >= 13
+// ====== Randomization (build trials from MIDI range) ======
+const MIN_INTERVAL = 13; // fixed constraint: one octave + semitone
 
 function okAdj(a, b) {
   return (
     a !== b &&
     Math.abs(b - a) >= MIN_INTERVAL &&
-    (a % 12) !== (b % 12) // 同じピッチクラス（オクターブ関係）禁止
+    (a % 12) !== (b % 12) // forbid same pitch class (octave-equivalent adjacency)
   );
 }
 
-// 1つのpool（偶数だけ、奇数だけ）を「全て1回ずつ」使って並べる
+// Build one sequence for a pool (evens only / odds only), using each note exactly once
 async function solveOnePool(pool, label) {
-  // 隣接可能性（グラフ）を事前計算
+  // Precompute adjacency graph
   const neighbors = new Map();
   for (const a of pool) {
     neighbors.set(a, pool.filter(b => okAdj(a, b)));
   }
 
-  // “候補が少ない順”で上位K個からランダムに開始点を選ぶ（固定化回避）
+  // Choose random start among top-K nodes with fewest neighbors (avoid fixed patterns)
   const K = Math.min(8, pool.length);
   const sorted = pool.slice().sort((x, y) => neighbors.get(x).length - neighbors.get(y).length);
   const start = sorted[Math.floor(Math.random() * K)];
@@ -260,21 +276,21 @@ async function solveOnePool(pool, label) {
 
     steps++;
     if (steps % YIELD_EVERY === 0) {
-      elStatus.textContent = `試行生成中…(${label}) step=${steps} / length=${path.length}`;
+      elStatus.textContent = `Generating trials...(${label}) step=${steps} / length=${path.length}`;
       await new Promise(r => setTimeout(r, 0));
     }
 
-    // 次候補：未使用
+    // Next candidates: unused only
     const cand = neighbors.get(curr).filter(v => !used.has(v));
 
-    // ヒューリスティック：次の候補数（未使用近傍数）が少ない順
+    // Heuristic: fewer remaining unused neighbors first
     cand.sort((a, b) => {
       const da = neighbors.get(a).filter(v => !used.has(v)).length;
       const db = neighbors.get(b).filter(v => !used.has(v)).length;
       return da - db;
     });
 
-    // 同点付近の固定化を避けるため、先頭数個を軽くシャッフル
+    // Lightly shuffle top candidates to avoid deterministic tie behavior
     const top = Math.min(6, cand.length);
     for (let i = top - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -294,69 +310,70 @@ async function solveOnePool(pool, label) {
   }
 
   const ok = await dfs(start);
-  if (!ok) throw new Error(`解が見つかりませんでした（${label}）`);
+  if (!ok) throw new Error(`No valid sequence found (${label})`);
 
   return path;
 }
 
-// ★ 60音(36..95)を全て1回ずつ使う
-//   偶数を作って→奇数を作って→連結点だけチェック
+// Use all 60 tones (36..95) exactly once
+// Build evens, then odds, and only validate the junction
 async function makeTrials(n) {
   const poolAll = makeMidiPool(); // 36..95
   if (n !== poolAll.length) {
-    throw new Error(`これは「範囲の全音を1回ずつ」前提です。n=${n}, pool=${poolAll.length}`);
+    throw new Error(`This mode assumes "use every tone in range exactly once". n=${n}, pool=${poolAll.length}`);
   }
 
   const evenPool = poolAll.filter(m => m % 2 === 0);
   const oddPool  = poolAll.filter(m => m % 2 === 1);
 
-  const MAX_TRIES = 200; // 失敗時の再試行上限
+  const MAX_TRIES = 200; // retry limit on failure
 
   for (let t = 1; t <= MAX_TRIES; t++) {
-    elStatus.textContent = `試行生成中… try ${t}/${MAX_TRIES}`;
+    elStatus.textContent = `Generating trials... try ${t}/${MAX_TRIES}`;
 
-    // 偶数→奇数をそれぞれ作る
+    // Build even and odd sequences separately
     const evenPath = await solveOnePool(evenPool, "even");
     const oddPath  = await solveOnePool(oddPool,  "odd");
 
-    // 連結点チェック
+    // Check junction compatibility
     const a = evenPath[evenPath.length - 1];
     const b = oddPath[0];
 
     if (okAdj(a, b)) {
       const path = evenPath.concat(oddPath);
 
-      // trials化
+      // Convert to trial objects
       return path.map((m) => {
         const { pc, oct } = midiToPcOct(m);
         return { midi: m, target: pc, oct, file: midiToFilename(m) };
       });
     }
-    // 連結点がダメならやり直し
+    // Retry if junction fails
   }
 
-  throw new Error("連結点の制約を満たせず、生成に失敗しました（再試行上限）。");
+  throw new Error("Failed to satisfy junction constraints (retry limit reached).");
 }
 
-// ====== 課題進行 ======
+// ====== Task flow ======
 async function startTest() {
     alreadySent = false;
 
-    // 1実施 = 1 runId（ユニークID）
+    // One runId per session
     runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-    ID = (elID.value || "").trim();
-    if (!ID) {
-      elStatus.textContent = "Please enter ID or Name.";
+    if (!validateStartRequirements(true)) {
       return;
     }
+    ID = (elID.value || "").trim();
   
-    // UI固定
+    // Lock UI
     btnDownload.disabled = true;
     btnStart.disabled = true;
     elID.disabled = true;
+    elStatus.classList.remove("compact");
+    if (elLabelModeChooser) elLabelModeChooser.style.display = "none";
   
-    // ここから音量チェック
+    // Enter volume check
     inVolumeCheck = true;
     btnVolPlay.disabled = false;
     btnVolOK.disabled = false;
@@ -395,7 +412,7 @@ async function startTest() {
       const nowCtx = audioCtx.currentTime;
       const msUntilStart = Math.max(0, (startAt - nowCtx) * 1000);
   
-      // 音オンセットの瞬間
+      // At audio onset
       setTimeout(() => {
   
         tSoundOn = performance.now();
@@ -404,8 +421,7 @@ async function startTest() {
         elStatus.textContent =
           `Trial ${trialIndex + 1} / ${trials.length} : Answer now`;
   
-        // ★ここが重要
-        // 音オンセットから5秒で必ず次へ
+        // Important: always advance 5s after tone onset
         trialTimeoutId = setTimeout(() => {
   
           if (!respondedThisTrial) {
@@ -436,7 +452,7 @@ async function startTest() {
     } catch (e) {
   
       elStatus.textContent = String(e.message || e);
-      btnStart.disabled = false;
+      updateStartButtonState();
       elID.disabled = false;
   
     }
@@ -444,7 +460,7 @@ async function startTest() {
 
   function handleResponse(resp) {
     if (!canRespond || !current) return;
-    if (respondedThisTrial) return; // 1trial 1回答
+    if (respondedThisTrial) return; // one response per trial
   
     const rt = performance.now() - tSoundOn;
     const correct = resp === current.target;
@@ -468,34 +484,71 @@ async function startTest() {
   
     respondedThisTrial = true;
   
-    // すぐ次へ行かない：trialTimeoutが5秒後に進める
+    // Do not advance immediately: trialTimeout advances after 5s
     elStatus.textContent = `Trial ${trialIndex + 1} / ${trials.length}：Waiting for the next sound...`;
   }
 
 
 function finishTest() {
   const { nCorrect, total } = calcAccuracy();
-  const accText = `${nCorrect} / ${total}`;
+  const accPct = (nCorrect / total) * 100;
+  const accPctText = accPct.toFixed(1);
   
   elStatus.innerHTML = `
     <b>You're done!</b><br>
-    Correct answers：<b>${accText}</b><br>
-    Accuracy rate：<b>${Math.round((nCorrect / total) * 100)}%</b><br>
+    Correct answers：<b>${nCorrect} / ${total}</b><br>
+    Accuracy rate：<b>${accPctText}%</b><br>
     Please click Download CSV or Save Result PDF.
     `;
     btnPdf.disabled = false;
     btnDownload.disabled = false;
-    btnStart.disabled = false;
+    updateStartButtonState();
     elID.disabled = false;
     
-    // --- 統合グラフ（正答率バー + 反応時間折れ線） ---
+    // --- Combined chart (accuracy bars + reaction-time dots) ---
     const { labels, rates, totals } = calcAccuracyByPitchClass();
     const { meansSec, counts } = calcMeanRTByPitchClass();
+    const rtValuesMs = results
+      .filter(r => typeof r.trial === "number" && r.correct === 1 && r.rt_ms !== "" && r.rt_ms != null && !Number.isNaN(Number(r.rt_ms)))
+      .map(r => Number(r.rt_ms));
+    const meanRtMs = rtValuesMs.length ? Math.round(rtValuesMs.reduce((a, b) => a + b, 0) / rtValuesMs.length) : null;
+    const noResponseN = results.filter(r => r.no_response === 1).length;
+    const noResponsePct = Math.round((noResponseN / total) * 100);
+    const bestIdx = rates.indexOf(Math.max(...rates));
+    const rtCandidates = meansSec
+      .map((v, i) => ({ idx: i, v, n: counts[i] }))
+      .filter(x => x.n > 0);
+    const fastest = rtCandidates.length ? rtCandidates.reduce((a, b) => (a.v <= b.v ? a : b)) : null;
+
+    elSummary.innerHTML = `
+      <div class="result-panel">
+        <div class="result-title">Result Summary</div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Accuracy</div>
+            <div class="kpi-value">${accPctText}%</div>
+            <div class="kpi-sub">${nCorrect} / ${total}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Mean RT (Correct only)</div>
+            <div class="kpi-value">${meanRtMs == null ? "-" : `${(meanRtMs / 1000).toFixed(2)}s`}</div>
+            <div class="kpi-sub">${rtValuesMs.length} trials</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">No Response</div>
+            <div class="kpi-value">${noResponsePct}%</div>
+            <div class="kpi-sub">${noResponseN} / ${total}</div>
+          </div>
+        </div>
+        <div class="insight-row">Best pitch: <b>${labels[bestIdx]}</b> (${Math.round(rates[bestIdx] * 100)}%)${fastest ? ` / Fastest RT: <b>${labels[fastest.idx]}</b> (${fastest.v.toFixed(2)}s)` : ""}</div>
+      </div>
+    `;
+
     canvasAcc.style.display = "block";
     drawBarChartAccuracy(canvasAcc, labels, rates, totals, meansSec, counts);
     canvasRT.style.display = "none";
 
-    // 画面リサイズで再描画（1回だけ設定）
+    // Redraw on resize (single handler assignment)
     window.onresize = () => {
       drawBarChartAccuracy(canvasAcc, labels, rates, totals, meansSec, counts);
     };
@@ -509,12 +562,12 @@ function calcAccuracy() {
 }
 
 function calcAccuracyByPitchClass() {
-  // 12音の集計：targetごとに (correct数 / 出題数)
+  // 12-note aggregation: per target (correct count / presented count)
   const stat = {};
   NOTE_NAMES.forEach(n => stat[n] = { total: 0, correct: 0 });
 
   for (const r of results) {
-    // trialが数値の行だけ（summary等が混ざっても無視できる）
+    // Only numeric trial rows (ignore any summary/misc rows)
     if (typeof r.trial !== "number") continue;
     if (!r.target || !(r.target in stat)) continue;
 
@@ -533,14 +586,13 @@ function calcAccuracyByPitchClass() {
 
 function labelForDisplay(pcSharp) {
   if (LABEL_MODE === "sharp") return pcSharp;
-  const idx = NOTE_NAMES.indexOf(pcSharp);
-  return idx >= 0 ? SOLFEGE_NAMES[idx] : pcSharp;
+  return DISPLAY_LABELS_SOLFEGE[pcSharp] ?? pcSharp;
 }
 
 function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [], rtCounts = []) {
-  // ★ 鍵盤の幅に揃える
+  // Match keyboard width
   const cssW = elKeyboard.getBoundingClientRect().width;
-  const cssH = 250;
+  const cssH = 280;
 
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = cssW + "px";
@@ -553,10 +605,13 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
 
   ctx.clearRect(0, 0, cssW, cssH);
 
-  // 余白
-  const padL = 48, padR = 52, padT = 34, padB = 46;
+  // Padding
+  const padL = 48, padR = 52, padT = 48, padB = 46;
   const plotW = cssW - padL - padR;
   const plotH = cssH - padT - padB;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, cssW, cssH);
 
   ctx.fillStyle = "#333";
   ctx.font = "bold 13px system-ui, sans-serif";
@@ -564,8 +619,13 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
   ctx.textBaseline = "middle";
   ctx.fillText("Accuracy + Mean Reaction Time by Pitch Class", padL + plotW / 2, 13);
   ctx.font = "12px system-ui, sans-serif";
+  ctx.fillStyle = "#5f6b7a";
+  ctx.textAlign = "left";
+  ctx.fillText("Bar: Accuracy (%)", padL, 31);
+  ctx.textAlign = "right";
+  ctx.fillText("Dot: Mean RT (s, correct only)", padL + plotW + 36, 31);
 
-  // 軸（0〜100%）
+  // Axis (0–100%)
   ctx.strokeStyle = "#333";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -574,12 +634,12 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
   ctx.lineTo(padL + plotW, padT + plotH);
   ctx.stroke();
 
-  // 目盛（0,50,100）
+  // Ticks
   ctx.fillStyle = "#333";
   ctx.font = "12px system-ui, sans-serif";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  [0, 0.5, 1].forEach(v => {
+  [0, 0.25, 0.5, 0.75, 1].forEach(v => {
     const y = padT + plotH - v * plotH;
     ctx.strokeStyle = "#ddd";
     ctx.beginPath();
@@ -596,9 +656,11 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
   const gap = 6;
   const barW = Math.max(6, (plotW - gap * (n - 1)) / n);
 
-  ctx.fillStyle = "#4a78ff"; // ※色指定を避けたいならここを消して黒でもOK
+  const accColorWhite = "#ffffff";
+  const accColorSharp = "#8a8a8a";
   ctx.strokeStyle = "#333";
 
+  const accLabelYs = Array(n).fill(null);
   for (let i = 0; i < n; i++) {
     const rate = rates[i];          // 0..1
     const x = padL + i * (barW + gap);
@@ -608,24 +670,33 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
     const pc = labelsSharp[i];
     const black = pc.includes("#");
 
-    ctx.fillStyle = black ? "#888" : "#fff";
+    ctx.fillStyle = black ? accColorSharp : accColorWhite;
     ctx.strokeStyle = "#333";
 
     ctx.fillRect(x, y, barW, h);
     ctx.strokeRect(x, y, barW, h);
 
-    // xラベル（表示モードに合わせる）
+    // X labels (respect current label mode)
     const lab = prettyLabel(labelForDisplay(labelsSharp[i]));
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#333";
     ctx.fillText(lab, x + barW / 2, padT + plotH + 14);
+
+    if (rate > 0) {
+      const accY = Math.max(padT + 8, y - 7);
+      accLabelYs[i] = accY;
+      ctx.font = "10px system-ui, sans-serif";
+      ctx.fillStyle = "#444";
+      ctx.fillText(`${(rate * 100).toFixed(1)}%`, x + barW / 2, accY);
+      ctx.font = "12px system-ui, sans-serif";
+    }
   }
 
   if (meansSec.length === n) {
-    const yMaxRT = 4.0; // 反応時間の右軸は 4.0s 固定
+    const yMaxRT = 4.0; // right axis fixed at 4.0s for reaction time
 
-    // 右軸（反応時間）
+    // Right axis (reaction time)
     ctx.strokeStyle = "#333";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -633,7 +704,7 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
     ctx.lineTo(padL + plotW, padT + plotH);
     ctx.stroke();
 
-    ctx.fillStyle = "#2f5f86";
+    ctx.fillStyle = "#555";
     ctx.font = "11px system-ui, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -642,7 +713,7 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
       ctx.fillText(`${rt.toFixed(1)}s`, padL + plotW + 6, y + 1);
     });
 
-    // 反応時間は点のみ（重なりを減らして可読性を優先）
+    // Reaction time: dots only (prioritize readability and reduce overlap)
     for (let i = 0; i < n; i++) {
       if ((rtCounts[i] || 0) <= 0) {
         continue;
@@ -650,14 +721,22 @@ function drawBarChartAccuracy(canvas, labelsSharp, rates, totals, meansSec = [],
       const x = padL + i * (barW + gap) + barW / 2;
       const y = padT + plotH - (Math.min(meansSec[i], yMaxRT) / yMaxRT) * plotH;
 
-      ctx.fillStyle = "#2f5f86";
+      ctx.fillStyle = "#555";
       ctx.beginPath();
       ctx.arc(x, y, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.font = "10px system-ui, sans-serif";
+      // If overlapping same-note accuracy label, shift RT label up/down
+      let rtLabelY = y - 8;
+      if (accLabelYs[i] != null && Math.abs(rtLabelY - accLabelYs[i]) < 12) {
+        rtLabelY = accLabelYs[i] - 12;
+        if (rtLabelY < padT + 8) rtLabelY = accLabelYs[i] + 12;
+      }
+      if (rtLabelY > padT + plotH - 4) rtLabelY = padT + plotH - 4;
+
+      ctx.font = "9px system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(`${meansSec[i].toFixed(2)}s`, x, y - 8);
+      ctx.fillText(`${meansSec[i].toFixed(1)}s`, x, rtLabelY);
       ctx.font = "12px system-ui, sans-serif";
     }
   }
@@ -682,10 +761,10 @@ async function volumePlay() {
     elStatus.textContent = "Generating trials...";
   
     try {
-      trials = await makeTrials(N_TRIALS);  // ★ここ
+      trials = await makeTrials(N_TRIALS);
     } catch (e) {
       elStatus.textContent = `Generation Error：${e.message}`;
-      // ボタンを戻して再試行できるように
+      // Restore buttons so user can retry
       btnVolPlay.disabled = false;
       btnVolOK.disabled = false;
       inVolumeCheck = true;
@@ -693,15 +772,49 @@ async function volumePlay() {
     }
   
     trialIndex = -1;
-    elStatus.textContent = `The main trial will begin in 5 seconds...`;
-  
-    setTimeout(async () => {
-      elStatus.textContent = "The trial begins";
-      await nextTrial();
-    }, START_DELAY_MS);
+    canRespond = false;
+    showLabelModeChooser();
   }
 
-// ====== CSV出力 ======
+function showLabelModeChooser() {
+  if (!elLabelModeChooser) {
+    startMainAfterLabelChoice();
+    return;
+  }
+  elLabelModeChooser.style.display = "block";
+  elStatus.classList.add("compact");
+  const current = document.querySelector(`input[name="labelMode"][value="${LABEL_MODE}"]`);
+  if (current) current.checked = true;
+  elStatus.textContent = "Volume check completed.";
+}
+
+async function startMainAfterLabelChoice() {
+  if (elLabelModeChooser) elLabelModeChooser.style.display = "none";
+  elStatus.classList.remove("compact");
+  elStatus.textContent = `The main trial will begin in 5 seconds...`;
+
+  setTimeout(async () => {
+    elStatus.textContent = "The trial begins";
+    await nextTrial();
+  }, START_DELAY_MS);
+}
+
+function wireLabelModeChooser() {
+  const radios = Array.from(document.querySelectorAll('input[name="labelMode"]'));
+  radios.forEach(r => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      LABEL_MODE = r.value === "solfege" ? "solfege" : "sharp";
+      buildChoiceButtons();
+    });
+  });
+
+  if (btnLabelModeStart) {
+    btnLabelModeStart.addEventListener("click", startMainAfterLabelChoice);
+  }
+}
+
+// ====== CSV export ======
 function toCSV(rows) {
   const header = Object.keys(rows[0] || {});
   const esc = (v) => {
@@ -715,11 +828,11 @@ function toCSV(rows) {
 function downloadCSV() {
   if (!results.length) return;
 
-  // ====== CSV生成 ======
+  // ====== Build CSV ======
   if (!results.length) return;
 
   const { nCorrect, total } = calcAccuracy();
-  const accPercent = Math.round((nCorrect / total) * 100);
+  const accPercent = ((nCorrect / total) * 100).toFixed(1);
   const timestamp = new Date()
     .toISOString()
     .slice(0, 19)
@@ -736,7 +849,7 @@ function downloadCSV() {
 function saveResultAsPDF() {
   if (!results.length) return;
 
-  // escapeHtml が無いときも落ちないようにする
+  // Fallback if escapeHtml is unavailable
   const esc = (typeof escapeHtml === "function")
     ? escapeHtml
     : (s) => String(s ?? "")
@@ -747,7 +860,7 @@ function saveResultAsPDF() {
         .replaceAll("'", "&#039;");
 
         function canvasToDataURLForPrint(canvas, targetDpi = 300, targetWidthIn = 6.8) {
-          // 印刷時の表示幅(in)に対して、常に targetDpi になるようにピクセル数を作る
+          // Create pixel dimensions to keep targetDpi at print width (inches)
           const targetW = Math.max(1, Math.round(targetDpi * targetWidthIn));
           const targetH = Math.max(1, Math.round(targetW * (canvas.height / canvas.width)));
           const tmp = document.createElement("canvas");
@@ -761,19 +874,19 @@ function saveResultAsPDF() {
         
           return tmp.toDataURL("image/png");
         }
-        // ---- saveResultAsPDF 内 ----
+        // ---- inside saveResultAsPDF ----
         const accChartDataUrl = (canvasAcc && canvasAcc.style.display !== "none")
           ? canvasToDataURLForPrint(canvasAcc, 300, 6.8)
           : "";
         const rtChartDataUrl = "";
 
   const { nCorrect, total } = calcAccuracy();
-  const accPct = Math.round((nCorrect / total) * 100);
+  const accPct = ((nCorrect / total) * 100).toFixed(1);
   const dt = new Date().toLocaleString();
 
   const w = window.open("", "_blank");
   if (!w) {
-    alert("ポップアップがブロックされました。ブラウザ設定で許可してください。");
+    alert("Popup was blocked. Please allow popups in your browser settings.");
     return;
   }
 
@@ -811,7 +924,7 @@ function saveResultAsPDF() {
       <img class="chart" src="${rtChartDataUrl}" alt="RT chart"/>
     ` : ""}
 
-    <div class="note">保存方法：PCは「PDFとして保存」、iPhoneは共有ボタンから「ファイルに保存」等を選択してください。</div>
+    <div class="note">How to save: On PC, choose "Save as PDF". On iPhone, use the Share button and choose "Save to Files".</div>
 
     <div style="margin-top:16px;">
       <button onclick="window.print()">Print / Save as PDF</button>
@@ -819,7 +932,7 @@ function saveResultAsPDF() {
   </div>
 
   <script>
-    // ★描画完了してから印刷（空白防止）
+    // Print after render completes (prevents blank output)
     window.addEventListener('load', () => {
       setTimeout(() => window.print(), 400);
     });
@@ -838,7 +951,7 @@ function setStatus(msg, isError=false) {
   elStatus.style.color = isError ? "crimson" : "#111";
 }
 
-// ===== 重複送信防止（送信は必ず1回だけ）=====
+// ===== Prevent duplicate submission (send exactly once) =====
 let alreadySent = false;
 
 async function sendOnce() {
@@ -870,24 +983,24 @@ async function sendOnce() {
 async function onDownloadCSV() {
   const ok = await sendOnce();
   if (!ok) return;
-  downloadCSV(); // ← 保存だけ（送信しない）
+  downloadCSV(); // save only (do not send)
 }
 
 async function onSavePDF() {
   const ok = await sendOnce();
   if (!ok) return;
 
-  // printを開く前に少し待つ（Safari/iPhoneで送信が中断されるのを避ける）
+  // Wait briefly before opening print dialog (avoid interrupted send on Safari/iPhone)
   await new Promise(r => setTimeout(r, 800));
 
-  saveResultAsPDF(); // ← save only（do not send）
+  saveResultAsPDF(); // save only (do not send)
 }
 
 function getDemographics() {
   const sex = (elSex?.value || "").trim();
   const age = (elAge?.value || "").trim();
 
-  // instruments: 複数行を [{name,start,end}] で回収
+  // instruments: collect multiple rows as [{name,start,end}]
   const rows = Array.from(document.querySelectorAll("#instRows .instRow"));
   const instruments = rows.map(r => {
     const nameSel = r.querySelector(".instName");
@@ -905,27 +1018,161 @@ function getDemographics() {
     const end = endRaw.toLowerCase() === "present" ? "present" : endRaw;
 
     return { name, startAge: start, endAge: end };
-  }).filter(x => x.name || x.startAge || x.endAge); // 空行は捨てる
+  }).filter(x => x.name || x.startAge || x.endAge); // drop empty rows
 
   return { sex, age, instruments };
+}
+
+function getInstrumentRowValues(row) {
+  const nameSel = row.querySelector(".instName");
+  const startEl = row.querySelector(".instStart");
+  const endEl   = row.querySelector(".instEnd");
+  const otherEl = row.querySelector(".instOther");
+
+  const rawName = (nameSel?.value || "").trim();
+  const other = (otherEl?.value || "").trim();
+  const start = (startEl?.value || "").trim();
+  const end = (endEl?.value || "").trim();
+  const name = rawName === "other" ? other : rawName;
+
+  return { rawName, name, other, start, end };
+}
+
+function isInstrumentRowComplete(v) {
+  // non-musician does not require age inputs
+  if (v.rawName === "non-musician") return !!v.name;
+  return !!v.name && !!v.start && !!v.end;
+}
+
+function clearInvalidMarks() {
+  document.querySelectorAll(".invalid-field").forEach(el => el.classList.remove("invalid-field"));
+}
+
+function markInvalid(el) {
+  if (!el) return;
+  el.classList.add("invalid-field");
+}
+
+function validateStartRequirements(showMessage = false) {
+  clearInvalidMarks();
+
+  const id = (elID?.value || "").trim();
+  const sex = (elSex?.value || "").trim();
+  const age = (elAge?.value || "").trim();
+  const rows = Array.from(document.querySelectorAll("#instRows .instRow"));
+  let msg = "";
+  let valid = true;
+
+  if (!id) {
+    markInvalid(elID);
+    valid = false;
+    msg ||= "Please enter ID or Name.";
+  }
+  if (!sex) {
+    markInvalid(elSex);
+    valid = false;
+    msg ||= "Please select Sex.";
+  }
+  if (!age) {
+    markInvalid(elAge);
+    valid = false;
+    msg ||= "Please enter Age.";
+  }
+  if (!rows.length) {
+    valid = false;
+    msg ||= "Please enter your instrument information.";
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const v = getInstrumentRowValues(rows[i]);
+    const nameSel = rows[i].querySelector(".instName");
+    const startEl = rows[i].querySelector(".instStart");
+    const endEl = rows[i].querySelector(".instEnd");
+    const otherEl = rows[i].querySelector(".instOther");
+    const isBlank = !v.rawName && !v.start && !v.end && !v.other;
+    const isComplete = isInstrumentRowComplete(v);
+
+    // Row 1 is required; additional rows must be either fully blank or fully completed
+    if (i === 0) {
+      if (!isComplete) {
+        if (!v.rawName) markInvalid(nameSel);
+        if (v.rawName === "other" && !v.other) markInvalid(otherEl);
+        if (v.rawName !== "non-musician" && !v.start) markInvalid(startEl);
+        if (v.rawName !== "non-musician" && !v.end) markInvalid(endEl);
+        valid = false;
+        msg ||= (v.rawName === "non-musician")
+          ? "Please select Instrument row 1."
+          : "Please complete Instrument row 1 (name, start age, end age).";
+      }
+    } else if (!isBlank && !isComplete) {
+      if (!v.rawName) markInvalid(nameSel);
+      if (v.rawName === "other" && !v.other) markInvalid(otherEl);
+      if (v.rawName !== "non-musician" && !v.start) markInvalid(startEl);
+      if (v.rawName !== "non-musician" && !v.end) markInvalid(endEl);
+      valid = false;
+      msg ||= `Please complete Instrument row ${i + 1} or leave it fully blank.`;
+    }
+  }
+
+  if (showMessage && !valid) elStatus.textContent = msg;
+  return valid;
+}
+
+function updateStartButtonState() {
+  if (!btnStart) return;
+  // Keep Start disabled during volume check
+  if (inVolumeCheck) {
+    btnStart.disabled = true;
+    return;
+  }
+  btnStart.disabled = !validateStartRequirements(false);
+}
+
+function wireStartValidation() {
+  [elID, elSex, elAge].forEach(el => {
+    if (!el) return;
+    el.addEventListener("input", updateStartButtonState);
+    el.addEventListener("change", updateStartButtonState);
+  });
+  updateStartButtonState();
 }
 
 function wireInstrumentUI() {
   if (!btnAddInst) return;
 
-  // other選択時だけ自由入力を表示
+  // Show free-text field only when "other" is selected
   const toggleOther = (row) => {
     const sel = row.querySelector(".instName");
     const other = row.querySelector(".instOther");
+    const start = row.querySelector(".instStart");
+    const end = row.querySelector(".instEnd");
     if (!sel || !other) return;
     const isOther = sel.value === "other";
+    const isNonMusician = sel.value === "non-musician";
     other.style.display = isOther ? "inline-block" : "none";
+    if (start) {
+      start.disabled = isNonMusician;
+      if (isNonMusician) start.value = "";
+    }
+    if (end) {
+      end.disabled = isNonMusician;
+      if (isNonMusician) end.value = "";
+    }
   };
 
-  // 既存1行にも付ける
+  // Attach handlers to the initial row as well
   document.querySelectorAll("#instRows .instRow").forEach(r => {
     const sel = r.querySelector(".instName");
-    if (sel) sel.addEventListener("change", () => toggleOther(r));
+    const other = r.querySelector(".instOther");
+    const start = r.querySelector(".instStart");
+    const end = r.querySelector(".instEnd");
+    if (sel) sel.addEventListener("change", () => {
+      toggleOther(r);
+      updateStartButtonState();
+    });
+    if (other) other.addEventListener("input", updateStartButtonState);
+    if (start) start.addEventListener("input", updateStartButtonState);
+    if (end) end.addEventListener("input", updateStartButtonState);
     toggleOther(r);
   });
 
@@ -934,21 +1181,29 @@ function wireInstrumentUI() {
     if (!base) return;
 
     const clone = base.cloneNode(true);
-    // 値をクリア
+    // Clear values
     clone.querySelectorAll("input").forEach(i => i.value = "");
     clone.querySelectorAll("select").forEach(s => s.value = "");
-    // otherは隠す
-    const other = clone.querySelector(".instOther");
-    if (other) other.style.display = "none";
+    // Hide "other" input
+    const otherInit = clone.querySelector(".instOther");
+    if (otherInit) otherInit.style.display = "none";
 
-    // changeイベント付け直し
+    // Rebind change handlers
     const sel = clone.querySelector(".instName");
+    const start = clone.querySelector(".instStart");
+    const end = clone.querySelector(".instEnd");
+    const other = clone.querySelector(".instOther");
     if (sel) sel.addEventListener("change", () => {
       const o = clone.querySelector(".instOther");
       if (o) o.style.display = (sel.value === "other") ? "inline-block" : "none";
+      updateStartButtonState();
     });
+    if (start) start.addEventListener("input", updateStartButtonState);
+    if (end) end.addEventListener("input", updateStartButtonState);
+    if (other) other.addEventListener("input", updateStartButtonState);
 
     elInstRows.appendChild(clone);
+    updateStartButtonState();
   });
 }
 
@@ -959,7 +1214,7 @@ function calcMeanRTByPitchClass() {
   for (const r of results) {
     if (typeof r.trial !== "number") continue;
     if (!r.target || !(r.target in stat)) continue;
-    if (r.correct !== 1) continue; // RTは正答試行のみで平均
+    if (r.correct !== 1) continue; // RT mean is computed from correct trials only
     if (r.rt_ms === "" || r.rt_ms == null || Number.isNaN(Number(r.rt_ms))) continue;
 
     stat[r.target].sum += Number(r.rt_ms);
@@ -1080,6 +1335,7 @@ window.addInstrumentRow = function addInstrumentRow() {
         <option value="cello">cello</option>
         <option value="guitar">guitar</option>
         <option value="voice">voice</option>
+        <option value="percussion">percussion</option>
         <option value="other">other</option>
       </select>
 
@@ -1090,12 +1346,24 @@ window.addInstrumentRow = function addInstrumentRow() {
   `);
 };
 
-  // other の時だけ自由入力を表示
+  // Show free-text input only when "other" is selected
   window.toggleOtherInput = function toggleOtherInput(sel) {
     const row = sel.closest(".instRow");
     const other = row.querySelector(".instOther");
+    const start = row.querySelector(".instStart");
+    const end = row.querySelector(".instEnd");
     if (!other) return;
     other.style.display = (sel.value === "other") ? "inline-block" : "none";
+    const isNonMusician = sel.value === "non-musician";
+    if (start) {
+      start.disabled = isNonMusician;
+      if (isNonMusician) start.value = "";
+    }
+    if (end) {
+      end.disabled = isNonMusician;
+      if (isNonMusician) end.value = "";
+    }
+    updateStartButtonState();
   };
 
 btnStart.addEventListener("click", startTest);
@@ -1105,3 +1373,6 @@ btnVolOK.addEventListener("click", volumeOK);
 //btnDownload.addEventListener("click", downloadCSV);
 btnDownload.addEventListener("click", onDownloadCSV);
 btnPdf.addEventListener("click", onSavePDF);
+wireInstrumentUI();
+wireLabelModeChooser();
+wireStartValidation();
