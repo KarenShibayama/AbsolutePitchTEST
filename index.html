@@ -233,23 +233,30 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbzEn8e3yRNdlsvHtuZuBK2IyeaIb5wXxkIqLxFF7JRYsVsJ93fBa2psOQsj1C0TDSFu/exec";
     
     async function sendDataToGAS({ ID, test, payload }) {
+      // payloadの中にrunIdやdemographicsが既に入っている想定
       const body = {
         ID,
         test,
-        payload,
+        payload, // ここにdemographicsやresultsをすべて集約
         userAgent: navigator.userAgent,
         clientTimeISO: new Date().toISOString(),
       };
 
       try {
+        // 確実に送信するために mode: "no-cors" が必要な場合がありますが、
+        // 基本は今の fetch で問題ありません。
         const res = await fetch(GAS_URL, {
           method: "POST",
+          mode: "no-cors", // GASの仕様上、レスポンスを受け取る場合は調整が必要
+          headers: {
+            "Content-Type": "text/plain", // GASはJSONを直接受け取るとCORSで詰まることがあるためtext/plainが安定します
+          },
           body: JSON.stringify(body),
         });
 
-      
-        return res.ok;
+        return true; 
       } catch (e) {
+        console.error("Submission failed:", e);
         return false;
       }
     }
